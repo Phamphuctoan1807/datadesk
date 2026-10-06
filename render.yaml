@@ -1,0 +1,13 @@
+services:
+  - type: web
+    name: datadesk
+    runtime: docker
+    plan: free
+    healthCheckPath: /robots.txt
+    envVars:
+      - key: APP_PASSWORD
+        sync: false
+      - key: AI_API_KEY
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true

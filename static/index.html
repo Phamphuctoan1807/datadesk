@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="vi"><head><meta charset="utf-8"><title>DataDesk · Sắp xếp, tô màu và xuất dữ liệu</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;700&display=swap">
+<style>
+:root{--bg:#f2f4f8;--card:#fff;--ink:#15202e;--mute:#5d6b7d;--line:#d9e0e9;--acc:#2457f5;--navy:#0f1b2d;--ok:#12803f;--bad:#b3261e;--soft:#eaf0ff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 14.5px/1.55 "Be Vietnam Pro",system-ui,"Segoe UI",Roboto,sans-serif}
+.top{background:var(--navy);color:#fff;padding:14px 24px;display:flex;align-items:center;gap:12px}
+.logo{width:30px;height:30px;border-radius:7px;background:var(--acc);display:grid;place-items:center;font-weight:700}
+.top b{font-size:17px}.top span{color:#9fb0c6;font-size:13px}
+main{max-width:1040px;margin:0 auto;padding:22px 16px 60px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px 20px;margin-bottom:14px}
+.card h2{font-size:16px;margin:0 0 4px}.sub{color:var(--mute);margin:0 0 14px;font-size:13px}
+#drop{display:block;border:2px dashed var(--line);border-radius:10px;padding:34px 14px;text-align:center;cursor:pointer;color:var(--mute)}
+#drop:hover,#drop.on,#drop:focus-within{border-color:var(--acc);background:var(--soft)}
+#drop b{display:block;color:var(--ink);font-size:17px;margin-bottom:4px}#drop input{position:absolute;opacity:0;width:1px;height:1px}
+#msg{margin:10px 0 0;color:var(--bad);font-weight:500;min-height:1.2em}#msg.ok{color:var(--mute);font-weight:400}
+.rw{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px}
+.rw>b{min-width:92px;font-weight:500;color:var(--mute);font-size:13px}
+select,input:not([type=checkbox]):not([type=color]){font:inherit;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:6px;padding:7px 9px;max-width:100%}
+input[type=color]{width:38px;height:34px;border:1px solid var(--line);border-radius:6px;padding:2px;background:#fff}
+input:disabled{background:var(--bg)}
+button{font:inherit;cursor:pointer}
+.add{border:1px dashed var(--acc);color:var(--acc);background:#fff;border-radius:6px;padding:6px 12px;font-weight:500}
+.rm{border:0;background:none;color:var(--mute);font-size:18px;padding:2px 8px}.rm:hover{color:var(--bad)}
+.go{background:var(--acc);color:#fff;border:0;border-radius:8px;padding:12px 24px;font-weight:700;font-size:15px;text-decoration:none;display:inline-block}
+.go:disabled{opacity:.6}
+.tw{overflow:auto;max-height:380px;border:1px solid var(--line);border-radius:6px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:6px 10px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap;max-width:260px;overflow:hidden;text-overflow:ellipsis}
+th{background:#eef2f7;position:sticky;top:0}.fl td{color:var(--ink)}
+.stats{display:flex;flex-wrap:wrap;gap:8px 22px;margin:0 0 12px}.stats div{color:var(--mute)}.stats b{color:var(--ink);font-size:18px;margin-right:4px}
+.chips{display:flex;flex-wrap:wrap;gap:6px 14px;margin-bottom:12px}.chips label{display:flex;gap:6px;align-items:center}
+.chk{list-style:none;padding:0;margin:0 0 14px}.chk li{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
+.chk .ic{font-weight:700;width:18px;flex:none}.y .ic{color:var(--ok)}.n .ic{color:var(--bad)}.chk small{display:block;color:var(--mute)}
+.verdict{font-weight:700;font-size:16px;margin:0 0 8px}
+.hint{color:var(--mute);font-size:13px;margin:6px 0 0}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.rt{margin-left:auto;display:flex;gap:12px;align-items:center}.badge{background:#1d2c44;color:#9fb0c6!important;border-radius:999px;padding:3px 11px;font-size:12px!important}
+.lo{background:none;border:1px solid #3a4b66;color:#dbe4f0;border-radius:6px;padding:5px 12px}.lo:hover{background:#1d2c44}
+.sg{display:flex;gap:12px;align-items:center;justify-content:space-between;border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px}.sg small{display:block;color:var(--mute)}
+</style></head><body>
+<div class="top"><div class="logo">D</div><b>DataDesk</b><span>Sắp xếp, tô màu và xuất dữ liệu từ file</span><div class="rt"><span class="badge" id="eng"></span><button class="lo" id="out">Đăng xuất</button></div></div>
+<main>
+<section class="card"><h2>Tải file lên</h2><p class="sub">PDF, Word (.docx), Excel (.xlsx), CSV, TSV, TXT hoặc JSON. Tối đa 30 MB.</p>
+<label id="drop"><input type="file" id="file" accept=".pdf,.docx,.xlsx,.xlsm,.csv,.tsv,.txt,.json"><b>Chọn file hoặc kéo thả vào đây</b>Hệ thống sẽ rà soát dữ liệu và hiện các tùy chọn bên dưới</label>
+<p id="msg" role="status" aria-live="polite"></p></section>
+<div id="work"></div>
+</main>
+<script>
+const $=q=>document.querySelector(q),esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const OPS=[['contains','chứa'],['eq','bằng'],['gt','lớn hơn'],['lt','nhỏ hơn'],['empty','để trống'],['notempty','không trống'],['dup','bị trùng']];
+const PAL=['#FFE08A','#FFB4B4','#B8F0CF','#B9D5FF','#E0CCFF'],TN={text:'Văn bản',number:'Số',date:'Ngày'};
+let ST=null;
+async function api(u,o){o=o||{};o.headers=Object.assign({'X-Requested-With':'datadesk'},o.headers||{});const r=await fetch(u,o);if(r.status===401){location='/login';throw new Error('Phiên đăng nhập đã hết hạn.')}let d={};try{d=await r.json()}catch(e){}if(!r.ok||d.error)throw new Error(d.error||'Lỗi máy chủ ('+r.status+')');return d}
+function msg(t,ok){const m=$('#msg');m.textContent=t||'';m.className=ok?'ok':''}
+async function upload(f){
+  msg('Đang đọc file…',1);const fd=new FormData();fd.append('file',f);
+  try{const d=await api('/api/analyze',{method:'POST',body:fd});
+    ST={id:d.id,name:d.name,tables:d.tables,t:0,sorts:[{col:-1,dir:'asc',type:'auto'}],hls:[],flts:[],mode:'all',onlyHl:false,fmt:'xlsx',res:null};
+    setInfo(d.tables[0]);msg('');suggest()}catch(e){msg(e.message)}}
+function setInfo(i,keep){ST.info=i;ST.hdr=i.header;ST.res=null;
+  if(!keep||!ST.cols||ST.cols.length!==i.columns.length)ST.cols=i.columns.map((_,c)=>c);
+  if(!keep){ST.sorts=[{col:-1,dir:'asc',type:'auto'}];ST.hls=[];ST.flts=[];ST.sug=null}ui()}
+async function loadTable(t,h,keep){try{const i=await api(`/api/table?id=${ST.id}&t=${t}&header=${h?1:0}`);ST.t=t;setInfo(i,keep)}catch(e){msg(e.message)}}
+const D=(k,i,f)=>`data-k="${k}" data-i="${i}" data-f="${f}"`;
+const colSel=(k,i,v)=>`<select ${D(k,i,'col')}><option value="-1">Chọn cột…</option>${ST.info.columns.map((c,n)=>`<option value="${n}"${n==v?' selected':''}>${esc(c.name)}</option>`).join('')}</select>`;
+const opSel=(k,r,i)=>`<select ${D(k,i,'op')}>${OPS.map(o=>`<option value="${o[0]}"${r.op===o[0]?' selected':''}>${o[1]}</option>`).join('')}</select>`;
+const valIn=(k,r,i)=>`<input ${D(k,i,'value')} value="${esc(r.value||'')}" placeholder="Giá trị" ${['empty','notempty','dup'].includes(r.op)?'disabled':''}>`;
+const rm=(k,i)=>`<button class="rm" data-rm="${k}" data-i="${i}" aria-label="Xóa dòng này">×</button>`;
+function ui(){
+  const I=ST.info,C=I.columns;let h='';
+  h+=`<section class="card"><h2>Kết quả rà soát: ${esc(ST.name)}</h2><p class="sub">Kiểm tra lại các cột và kiểu dữ liệu nhận diện trước khi chọn cách xử lý.</p>
+  <div class="rw">${ST.tables.length>1?`<select id="tsel">${ST.tables.map((x,i)=>`<option value="${i}"${i===ST.t?' selected':''}>${esc(x.name)}</option>`).join('')}</select>`:''}
+  <label class="chips" style="margin:0"><span><input type="checkbox" id="hdr"${ST.hdr?' checked':''}> Dòng đầu tiên là tiêu đề cột</span></label></div>
+  <div class="stats"><div><b>${I.n_rows}</b>dòng dữ liệu</div><div><b>${I.n_cols}</b>cột</div><div><b>${I.empty}</b>ô trống</div><div><b>${I.dup}</b>dòng trùng hoàn toàn</div></div>
+  ${I.dropped?`<p class="hint">${I.dropped} dòng trống hoàn toàn trong file gốc sẽ không đưa vào kết quả.</p>`:''}
+  <div class="tw"><table><tr><th>Cột</th><th>Kiểu nhận diện</th><th>Ô trống</th><th>Giá trị khác nhau</th><th>Ví dụ</th></tr>${C.map(c=>`<tr><td>${esc(c.name)}</td><td>${TN[c.type]}</td><td>${c.empty}</td><td>${c.unique}</td><td>${esc(c.sample)}</td></tr>`).join('')}</table></div></section>`;
+  h+=sug();
+  h+=`<section class="card"><h2>Sắp xếp</h2><p class="sub">Có thể xếp nhiều cấp. Ô trống luôn nằm cuối.</p>${ST.sorts.map((s,i)=>`<div class="rw"><b>${i?'Sau đó theo':'Sắp xếp theo'}</b>${colSel('sorts',i,s.col)}
+  <select ${D('sorts',i,'dir')}><option value="asc"${s.dir==='asc'?' selected':''}>Tăng dần (A→Z, nhỏ→lớn, cũ→mới)</option><option value="desc"${s.dir==='desc'?' selected':''}>Giảm dần (Z→A, lớn→nhỏ, mới→cũ)</option></select>
+  <select ${D('sorts',i,'type')}>${[['auto','Tự nhận diện kiểu'],['text','Văn bản'],['number','Số'],['date','Ngày']].map(a=>`<option value="${a[0]}"${s.type===a[0]?' selected':''}>${a[1]}</option>`).join('')}</select>${rm('sorts',i)}</div>`).join('')}
+  ${ST.sorts.length<5?'<button class="add" data-add="sorts">+ Thêm cấp sắp xếp</button>':''}</section>`;
+  h+=`<section class="card"><h2>Tô màu</h2><p class="sub">Ô hoặc dòng thỏa điều kiện sẽ được tô màu trong file Excel. Quy tắc nào khớp trước sẽ được ưu tiên.</p>${ST.hls.map((r,i)=>`<div class="rw"><b>Nếu cột</b>${colSel('hls',i,r.col)}${opSel('hls',r,i)}${valIn('hls',r,i)}
+  <input type="color" ${D('hls',i,'color')} value="${r.color}" aria-label="Màu tô"><select ${D('hls',i,'scope')}><option value="row"${r.scope==='row'?' selected':''}>Tô cả dòng</option><option value="cell"${r.scope==='cell'?' selected':''}>Chỉ tô ô</option></select>${rm('hls',i)}</div>`).join('')}
+  <button class="add" data-add="hls">+ Thêm quy tắc tô màu</button></section>`;
+  h+=`<section class="card"><h2>Chọn dữ liệu cần xuất</h2><p class="sub">Chỉ xuất những cột và dòng bạn muốn. Để trống phần lọc nếu muốn xuất tất cả dòng.</p>
+  <div class="chips">${C.map((c,n)=>`<label><input type="checkbox" data-col="${n}"${ST.cols.includes(n)?' checked':''}> ${esc(c.name)}</label>`).join('')}</div>
+  ${ST.flts.map((r,i)=>`<div class="rw"><b>${i?(ST.mode==='all'?'Và':'Hoặc'):'Chỉ giữ dòng có'}</b>${colSel('flts',i,r.col)}${opSel('flts',r,i)}${valIn('flts',r,i)}${rm('flts',i)}</div>`).join('')}
+  <div class="rw"><button class="add" data-add="flts">+ Thêm điều kiện lọc dòng</button>${ST.flts.length>1?`<select id="mode"><option value="all"${ST.mode==='all'?' selected':''}>Dòng phải thỏa tất cả điều kiện</option><option value="any"${ST.mode==='any'?' selected':''}>Dòng thỏa một trong các điều kiện</option></select>`:''}
+  ${ST.hls.length?`<label><input type="checkbox" id="onlyhl"${ST.onlyHl?' checked':''}> Chỉ xuất các dòng được tô màu</label>`:''}</div></section>`;
+  h+=`<section class="card"><h2>Xuất file</h2><div class="rw"><select id="fmt"><option value="xlsx"${ST.fmt==='xlsx'?' selected':''}>Excel (.xlsx), giữ màu tô</option><option value="csv"${ST.fmt==='csv'?' selected':''}>CSV (.csv), không có màu</option></select>
+  <button class="go" id="go">Xử lý và kiểm tra dữ liệu</button></div><p class="hint">Sau khi xử lý, hệ thống đọc lại file vừa tạo và đối chiếu với file gốc. Chỉ khi mọi bước đạt thì nút tải về mới xuất hiện.</p>${res()}</section>`;
+  $('#work').innerHTML=h}
+function res(){const r=ST.res;if(!r)return'';
+  if(r.error)return`<p class="verdict" id="res" style="color:var(--bad)">${esc(r.error)}</p>`;
+  let h=`<div id="res" style="margin-top:14px"><p class="verdict" style="color:var(--${r.ok?'ok':'bad'})">${r.ok?'Dữ liệu đã được kiểm tra, toàn bộ chính xác.':'Phát hiện sai lệch, file chưa được cung cấp để tải về.'}</p><p class="hint" style="margin:0 0 6px">Dữ liệu được xử lý bằng bộ xử lý ${esc(r.engine)} và đối chiếu lại bằng bản Python độc lập.</p>
+  <ul class="chk">${r.checks.map(c=>`<li class="${c.ok?'y':'n'}"><span class="ic">${c.ok?'✓':'✗'}</span><span>${esc(c.t)}<small>${esc(c.d)}</small></span></li>`).join('')}</ul>`;
+  h+=`<p class="sub">Xem trước ${Math.min(r.preview.length-(r.header?1:0),100)} trên ${r.total} dòng:</p><div class="tw"><table>${r.preview.map((row,i)=>{const th=r.header&&i===0;return'<tr class="fl">'+row.map((v,c)=>{const f=r.fills[i][c];return`<${th?'th':'td'}${f?` style="background:${f}"`:''}>${esc(v)}</${th?'th':'td'}>`}).join('')+'</tr>'}).join('')}</table></div>`;
+  if(r.ok)h+=`<p style="margin:14px 0 0"><a class="go" href="/api/download/${r.token}" download="${esc(r.filename)}">Tải ${esc(r.filename)}</a></p>`;
+  return h+'</div>'}
+async function run(){
+  const b=$('#go');b.disabled=true;b.textContent='Đang xử lý và kiểm tra…';
+  const ok=L=>L.filter(x=>x.col>=0);
+  try{ST.res=await api('/api/process',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:ST.id,table:ST.t,header:ST.hdr,sorts:ok(ST.sorts),highlights:ok(ST.hls),filters:ok(ST.flts),filter_mode:ST.mode,only_highlighted:ST.onlyHl,columns:ST.cols,format:ST.fmt})})}
+  catch(e){ST.res={error:e.message}}
+  ui();const r=$('#res');if(r)r.scrollIntoView({behavior:'smooth',block:'center'})}
+const W=$('#work');
+W.addEventListener('input',e=>{const d=e.target.dataset;if(d.k){ST[d.k][+d.i][d.f]=e.target.value;ST.res=null}});
+W.addEventListener('change',e=>{const el=e.target,d=el.dataset;
+  if(d.k){const v=el.value;ST[d.k][+d.i][d.f]=d.f==='col'?+v:v;ST.res=null;if(d.f!=='value'&&d.f!=='color')ui()}
+  else if(el.id==='tsel')loadTable(+el.value,ST.tables[+el.value].header,false);
+  else if(el.id==='hdr')loadTable(ST.t,el.checked,true);
+  else if(d.col!==undefined){const c=+d.col;ST.cols=el.checked?[...ST.cols,c].sort((a,b)=>a-b):ST.cols.filter(x=>x!==c);ST.res=null}
+  else if(el.id==='mode'){ST.mode=el.value;ST.res=null;ui()}
+  else if(el.id==='onlyhl'){ST.onlyHl=el.checked;ST.res=null}
+  else if(el.id==='fmt'){ST.fmt=el.value;ST.res=null}});
+W.addEventListener('click',e=>{const el=e.target.closest('button');if(!el)return;
+  if(el.id==='go')run();
+  else if(el.id==='ai')suggest();
+  else if(el.dataset.ap!==undefined)applySug(+el.dataset.ap);
+  else if(el.dataset.add){const k=el.dataset.add;ST[k].push(k==='sorts'?{col:-1,dir:'asc',type:'auto'}:{col:-1,op:'contains',value:'',color:PAL[ST[k].length%5],scope:'row'});ST.res=null;ui()}
+  else if(el.dataset.rm){ST[el.dataset.rm].splice(+el.dataset.i,1);ST.res=null;ui()}});
+let CFG={ai:false,engine:'Python'};
+async function suggest(){
+  if(!CFG.ai||!ST)return;
+  ST.sug='loading';ui();
+  try{const d=await api('/api/suggest',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:ST.id,table:ST.t,header:ST.hdr})});ST.sug=d.suggestions}
+  catch(e){ST.sug={error:e.message}}
+  ui()}
+function sug(){
+  if(!CFG.ai)return'';const s=ST.sug;let b='';
+  if(s==='loading')b='<p class="hint">AI đang phân tích dữ liệu của bạn…</p>';
+  else if(s&&s.error)b=`<p class="hint" style="color:var(--bad)">${esc(s.error)}</p>`;
+  else if(Array.isArray(s))b=s.length?s.map((x,i)=>`<div class="sg"><div><b>${esc(x.title)}</b><small>${esc(x.reason)}</small></div><button class="add" data-ap="${i}">Áp dụng</button></div>`).join(''):'<p class="hint">AI chưa có gợi ý phù hợp với dữ liệu này.</p>';
+  return `<section class="card"><h2>Gợi ý từ AI</h2><p class="sub">AI chỉ nhận tên cột, kiểu dữ liệu và vài dòng mẫu để đề xuất tùy chọn, không chỉnh sửa dữ liệu. Việc xử lý thật do bộ xử lý ${esc(CFG.engine)} thực hiện và được kiểm tra lại.</p>${b}<button class="add" id="ai" style="margin-top:6px"${s==='loading'?' disabled':''}>Gợi ý lại</button></section>`}
+function applySug(i){
+  const s=ST.sug[i];
+  ST.sorts=s.sorts.length?s.sorts.map(x=>({col:x.col,dir:x.dir,type:'auto'})):[{col:-1,dir:'asc',type:'auto'}];
+  ST.hls=s.highlights.map(r=>({col:r.col,op:r.op,value:r.value,scope:r.scope,color:r.color}));
+  ST.flts=s.filters.map(r=>({col:r.col,op:r.op,value:r.value}));
+  ST.res=null;ui();const c=document.querySelectorAll('#work .card')[2];if(c)c.scrollIntoView({behavior:'smooth',block:'start'})}
+api('/api/config').then(c=>{CFG=c;$('#eng').textContent='Bộ xử lý: '+c.engine}).catch(()=>{});
+$('#out').onclick=()=>fetch('/api/logout',{method:'POST',headers:{'X-Requested-With':'datadesk'}}).finally(()=>{location='/login'});
+const dz=$('#drop');
+$('#file').addEventListener('change',e=>{if(e.target.files[0])upload(e.target.files[0]);e.target.value=''});
+['dragover','dragenter'].forEach(v=>dz.addEventListener(v,e=>{e.preventDefault();dz.classList.add('on')}));
+['dragleave','drop'].forEach(v=>dz.addEventListener(v,e=>{e.preventDefault();dz.classList.remove('on')}));
+dz.addEventListener('drop',e=>{const f=e.dataTransfer.files[0];if(f)upload(f)});
+</script></body></html>
