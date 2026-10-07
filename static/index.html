@@ -42,6 +42,7 @@ th{background:#eef2f7;position:sticky;top:0}.fl td{color:var(--ink)}
 .sg{display:flex;gap:12px;align-items:center;justify-content:space-between;border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px}.sg small{display:block;color:var(--mute)}
 .gr td{cursor:pointer}.gr td:hover{outline:1px solid var(--acc);outline-offset:-1px}.gr td.mkd{background:#FF5C5C;color:#15202e}.gr td.rn{color:var(--mute);background:#eef2f7;cursor:default;outline:0}
 .add:disabled{opacity:.45;cursor:not-allowed}
+.bar{position:sticky;bottom:0;z-index:5;background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;gap:12px;box-shadow:0 -4px 14px rgba(15,27,45,.12)}
 </style></head><body>
 <div class="top"><div class="logo">D</div><b>DataDesk</b><span>Sắp xếp, tô màu và xuất dữ liệu từ file</span><div class="rt"><span class="badge" id="eng"></span><button class="lo" id="out">Đăng xuất</button></div></div>
 <main>
@@ -98,20 +99,23 @@ function ui(){
   ${ST.hls.length||ST.marks.size||ST.me||I.colored?`<label><input type="checkbox" id="onlyhl"${ST.onlyHl?' checked':''}> Chỉ xuất các dòng có ô được tô màu</label>`:''}</div></section>`;
   h+=`<section class="card"><h2>Xuất file</h2><div class="rw"><select id="fmt"><option value="xlsx"${ST.fmt==='xlsx'?' selected':''}>Excel (.xlsx), giữ màu tô</option><option value="csv"${ST.fmt==='csv'?' selected':''}>CSV (.csv), không có màu</option></select>
   <button class="go" id="go">Xử lý và kiểm tra dữ liệu</button></div><p class="hint">Sau khi xử lý, hệ thống đọc lại file vừa tạo và đối chiếu với file gốc. Chỉ khi mọi bước đạt thì nút tải về mới xuất hiện.</p>${res()}</section>`;
+  h+=bar();
   $('#work').innerHTML=h}
 function res(){const r=ST.res;if(!r)return'';
   if(r.error)return`<p class="verdict" id="res" style="color:var(--bad)">${esc(r.error)}</p>`;
-  let h=`<div id="res" style="margin-top:14px"><p class="verdict" style="color:var(--${r.ok?'ok':'bad'})">${r.ok?'Dữ liệu đã được kiểm tra, toàn bộ chính xác.':'Phát hiện sai lệch, file chưa được cung cấp để tải về.'}</p><p class="hint" style="margin:0 0 6px">Dữ liệu được xử lý bằng bộ xử lý ${esc(r.engine)} và đối chiếu lại bằng bản Python độc lập.</p>
+  let h=`<div id="res" style="margin-top:14px"><p class="verdict" style="color:var(--${r.ok?'ok':'bad'})">${r.ok?'Dữ liệu đã được kiểm tra, toàn bộ chính xác.':'Có điểm chưa khớp ở bước kiểm tra (xem dấu ✗ bên dưới). Bạn vẫn có thể tải file, nhưng nên kiểm tra kỹ trước khi dùng.'}</p><p class="hint" style="margin:0 0 6px">Dữ liệu được xử lý bằng bộ xử lý ${esc(r.engine)} và đối chiếu lại bằng bản Python độc lập.</p>
   <ul class="chk">${r.checks.map(c=>`<li class="${c.ok?'y':'n'}"><span class="ic">${c.ok?'✓':'✗'}</span><span>${esc(c.t)}<small>${esc(c.d)}</small></span></li>`).join('')}</ul>`;
   h+=`<p class="sub">Xem trước ${Math.min(r.preview.length-(r.header?1:0),100)} trên ${r.total} dòng:</p><div class="tw"><table>${r.preview.map((row,i)=>{const th=r.header&&i===0;return'<tr class="fl">'+row.map((v,c)=>{const f=r.fills[i][c];return`<${th?'th':'td'}${f?` style="background:${f}"`:''}>${esc(v)}</${th?'th':'td'}>`}).join('')+'</tr>'}).join('')}</table></div>`;
-  if(r.ok)h+=`<p style="margin:14px 0 0"><a class="go" href="/api/download/${r.token}" download="${esc(r.filename)}">Tải ${esc(r.filename)}</a></p>`;
+  if(!r.total)h+='<p class="hint">Không có dòng nào khớp điều kiện nên file chỉ có dòng tiêu đề.</p>';
+  if(r.token)h+=`<p style="margin:14px 0 0"><a class="go" href="/api/download/${r.token}" download="${esc(r.filename)}">${r.ok?'Tải ':'Vẫn tải '}${esc(r.filename)}</a></p>`;
   return h+'</div>'}
-async function run(){
-  const b=$('#go');b.disabled=true;b.textContent='Đang xử lý và kiểm tra…';
+async function run(auto){
+  document.querySelectorAll('#go,#go2').forEach(b=>{b.disabled=true;b.textContent='Đang xử lý và kiểm tra…'});
   const ok=L=>L.filter(x=>x.col>=0);
   try{ST.res=await api('/api/process',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:ST.id,table:ST.t,header:ST.hdr,sorts:ok(ST.sorts),highlights:ok(ST.hls),filters:ok(ST.flts),filter_mode:ST.mode,only_highlighted:ST.onlyHl,marks:[...ST.marks].map(k=>k.split(':').map(Number)),mark_empty:ST.me,columns:ST.cols,format:ST.fmt})})}
   catch(e){ST.res={error:e.message}}
-  ui();const r=$('#res');if(r)r.scrollIntoView({behavior:'smooth',block:'center'})}
+  ui();if(auto&&ST.res.ok&&ST.res.token){const a=document.createElement('a');a.href='/api/download/'+ST.res.token;a.download=ST.res.filename;document.body.appendChild(a);a.click();a.remove()}
+  const r=$('#res');if(r)r.scrollIntoView({behavior:'smooth',block:'center'})}
 const W=$('#work');
 W.addEventListener('input',e=>{const d=e.target.dataset;if(d.k){ST[d.k][+d.i][d.f]=e.target.value;ST.res=null}});
 W.addEventListener('change',e=>{const el=e.target,d=el.dataset;
@@ -126,7 +130,7 @@ W.addEventListener('change',e=>{const el=e.target,d=el.dataset;
 W.addEventListener('click',e=>{const td=e.target.closest('td[data-r]');
   if(td){const k=td.dataset.r+':'+td.dataset.c;ST.marks.has(k)?ST.marks.delete(k):ST.marks.add(k);td.classList.toggle('mkd');ST.res=null;const mc=$('#mc b');if(mc)mc.textContent=ST.marks.size;const rs=$('#res');if(rs)rs.remove();return}
   const el=e.target.closest('button');if(!el)return;
-  if(el.id==='go')run();
+  if(el.id==='go'||el.id==='go2')run(el.id==='go2');
   else if(el.id==='mclr'){ST.marks.clear();ST.res=null;ui()}
   else if(el.dataset.pg)pageGrid(+el.dataset.pg);
   else if(el.id==='ai')suggest();
@@ -141,6 +145,7 @@ function mkCard(){
   return`<section class="card"><h2>Đánh dấu dữ liệu thiếu (tô đỏ)</h2><p class="sub">Bấm vào ô trong bảng để tô đỏ, bấm lần nữa để bỏ. Ô đỏ giữ nguyên màu trong file Excel xuất ra để đi báo cáo, kể cả sau khi sắp xếp hay lọc.</p>
   <div class="rw"><label><input type="checkbox" id="me"${ST.me?' checked':''}> Tự động tô đỏ tất cả ô trống (${I.empty} ô)</label></div>${g}
   <div class="rw" style="margin-top:8px"><span id="mc">Đã đánh dấu thủ công: <b>${ST.marks.size}</b> ô</span><button class="add" id="mclr">Bỏ hết đánh dấu</button></div></section>`}
+function bar(){const n=ST.marks.size;return`<div class="bar"><span>${n?`Đã đánh dấu <b>${n}</b> ô thủ công`:'Sẵn sàng xuất file'}${ST.me?', tự tô đỏ ô trống':''}</span><button class="go" id="go2">Xuất file ngay</button></div>`}
 let CFG={ai:false,engine:'Python'};
 async function suggest(){
   if(!CFG.ai||!ST)return;

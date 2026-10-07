@@ -1,5 +1,5 @@
 """DataDesk backend: đọc file -> sắp xếp / tô màu / lọc cột-dòng -> kiểm tra -> xuất file."""
-import io, os, re, csv, json, time, uuid, hmac, secrets, unicodedata, urllib.request, urllib.error, datetime as dt
+import io, os, re, csv, json, time, uuid, hmac, secrets, socket, unicodedata, urllib.request, urllib.error, datetime as dt
 from collections import Counter
 from flask import Flask, request, jsonify, send_file, session, redirect
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -19,9 +19,9 @@ app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax",
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
 FAILS = {}
 RED = "#FF5C5C"  # màu đỏ dùng khi đánh dấu thiếu sót
-AI_KEY = os.environ.get("AI_API_KEY", "")
-AI_URL = os.environ.get("AI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai").rstrip("/")
-AI_MODEL = os.environ.get("AI_MODEL", "gemini-flash-latest")
+AI_KEY = os.environ.get("AI_API_KEY", "").strip()  # bỏ khoảng trắng/xuống dòng dán nhầm
+AI_URL = (os.environ.get("AI_BASE_URL") or "https://generativelanguage.googleapis.com/v1beta/openai").strip().rstrip("/")  # biến để trống thì dùng mặc định
+AI_MODEL = (os.environ.get("AI_MODEL") or "gemini-flash-latest").strip()
 ILL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
 
 def gc():
@@ -480,12 +480,31 @@ def suggest():
     usr = json.dumps({"rows": I["n_rows"], "columns": cols, "sample_rows": sample}, ensure_ascii=False)
     body = json.dumps({"model": AI_MODEL, "temperature": 0.2, "messages": [{"role": "system", "content": sysm}, {"role": "user", "content": usr}]}).encode()
     rq = urllib.request.Request(AI_URL + "/chat/completions", body, {"Content-Type": "application/json", "Authorization": "Bearer " + AI_KEY})
+    if not AI_KEY.isascii(): raise ValueError("Khóa AI chứa ký tự lạ. Hãy dán lại khóa (chỉ gồm chữ, số, dấu gạch) vào biến AI_API_KEY.")
     try:
-        with urllib.request.urlopen(rq, timeout=25) as r: txt = json.load(r)["choices"][0]["message"]["content"]
+        with urllib.request.urlopen(rq, timeout=45) as r: data = json.load(r)
+        txt = data["choices"][0]["message"]["content"] or ""
     except urllib.error.HTTPError as e:
-        raise ValueError({401: "Khóa AI không hợp lệ.", 403: "Khóa AI không có quyền dùng mô hình này.", 404: "Tên mô hình AI không đúng (kiểm tra AI_MODEL).",
-                          429: "AI miễn phí đang quá giới hạn, hãy thử lại sau ít phút."}.get(e.code, "Dịch vụ AI báo lỗi %d." % e.code))
-    except Exception: raise ValueError("Không kết nối được dịch vụ AI.")
+        try: det = e.read().decode("utf-8", "replace")[:300]
+        except Exception: det = ""
+        print("AI loi HTTP", e.code, det, flush=True)  # xem trong Logs của Render
+        raise ValueError({401: "Khóa AI không hợp lệ hoặc đã bị thu hồi. Hãy tạo khóa mới và dán lại vào AI_API_KEY.",
+                          403: "Khóa AI không có quyền dùng mô hình này, hoặc dịch vụ AI chưa mở ở khu vực của máy chủ.",
+                          404: "Không tìm thấy mô hình AI hoặc địa chỉ AI. Kiểm tra AI_MODEL và AI_BASE_URL (xóa hai biến này để dùng mặc định).",
+                          429: "AI miễn phí đang quá giới hạn, hãy thử lại sau ít phút."}.get(e.code, "Dịch vụ AI báo lỗi %d: %s" % (e.code, det[:120].replace("\n", " "))))
+    except urllib.error.URLError as e:
+        print("AI loi mang", repr(e.reason), flush=True)
+        if isinstance(e.reason, (TimeoutError, socket.timeout)): raise ValueError("Dịch vụ AI không phản hồi kịp (quá 45 giây). Hãy bấm Gợi ý lại.")
+        if isinstance(e.reason, socket.gaierror): raise ValueError("Máy chủ không tìm thấy địa chỉ AI. Kiểm tra AI_BASE_URL (xóa biến này để dùng Gemini mặc định).")
+        raise ValueError("Không kết nối được dịch vụ AI (%s)." % type(e.reason).__name__)
+    except (TimeoutError, socket.timeout):
+        raise ValueError("Dịch vụ AI không phản hồi kịp (quá 45 giây). Hãy bấm Gợi ý lại.")
+    except (KeyError, IndexError, TypeError, ValueError) as e:
+        print("AI tra ve sai dang", repr(e), flush=True)
+        raise ValueError("AI trả về dữ liệu không đúng dạng. Kiểm tra AI_BASE_URL và AI_MODEL (xóa hai biến này để dùng mặc định).")
+    except Exception as e:
+        print("AI loi khac", repr(e), flush=True)
+        raise ValueError("Không kết nối được dịch vụ AI (%s)." % type(e).__name__)
     m = re.search(r"\{.*\}|\[.*\]", txt, re.S)
     try: raw = json.loads(m.group(0)) if m else None
     except ValueError: raw = None

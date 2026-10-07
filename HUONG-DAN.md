@@ -47,3 +47,11 @@ Mọi trang gửi kèm `noindex` và `robots.txt` chặn công cụ tìm kiếm,
 - Mật khẩu đặt trong biến môi trường, so sánh an toàn, phiên đăng nhập 8 giờ, cookie HttpOnly.
 - Sai 5 lần trong 10 phút thì khóa tạm theo địa chỉ IP.
 - Nên dùng mật khẩu dài và không dựa trên tên bạn.
+
+## 6. Gợi ý AI báo lỗi
+Trang giờ nói rõ nguyên nhân. Cách xử lý theo từng thông báo:
+- **Khóa AI không hợp lệ / ký tự lạ:** vào Render, mục Environment, xóa `AI_API_KEY` rồi dán lại khóa mới (không có dấu cách hay xuống dòng ở đầu, cuối).
+- **Không tìm thấy mô hình hoặc địa chỉ AI / dữ liệu không đúng dạng:** xóa hẳn hai biến `AI_BASE_URL` và `AI_MODEL` (nếu bạn đã thêm) để dùng mặc định Gemini.
+- **Quá giới hạn:** đợi vài phút rồi bấm "Gợi ý lại".
+- **Không phản hồi kịp:** bấm "Gợi ý lại".
+- **Vẫn lỗi:** vào Render, mục Logs, tìm dòng bắt đầu bằng "AI loi" (nội dung không chứa khóa) và gửi cho người hỗ trợ.
