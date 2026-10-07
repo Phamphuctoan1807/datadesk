@@ -56,3 +56,14 @@ Trang giờ nói rõ nguyên nhân. Cách xử lý theo từng thông báo:
 - **Không phản hồi kịp:** bấm "Gợi ý lại".
 - **Vẫn lỗi:** vào Render, mục Logs, tìm dòng bắt đầu bằng "AI loi" (nội dung không chứa khóa) và gửi cho người hỗ trợ.
 - **"Không phản hồi kịp (quá 45 giây)":** bản mới tự gửi mức suy nghĩ "low" để Gemini trả lời nhanh hơn. Nếu vẫn chậm, đặt biến `AI_MODEL` sang một mô hình Flash-Lite (xem tên chính xác trong danh sách mô hình tại ai.google.dev) hoặc dùng nhà cung cấp khác. Muốn tắt tham số mức suy nghĩ, đặt `AI_REASONING=off`.
+
+## 7. Dùng OpenRouter thay cho Gemini
+1. Tạo tài khoản tại openrouter.ai, vào openrouter.ai/keys tạo khóa (bắt đầu bằng `sk-or-`).
+2. Trên Render, mục Environment, đặt 3 biến:
+   - `AI_API_KEY`: khóa OpenRouter vừa tạo
+   - `AI_BASE_URL`: `https://openrouter.ai/api/v1`
+   - `AI_MODEL`: tên một mô hình miễn phí (kết thúc bằng `:free`), chép đúng từ openrouter.ai/models (lọc Free)
+3. Lưu và đợi dịch vụ khởi động lại. Bản mới không gửi tham số suy nghĩ của Gemini cho OpenRouter.
+- Giới hạn miễn phí theo tài liệu OpenRouter: 20 lượt mỗi phút, 50 lượt mỗi ngày (1.000 lượt nếu tài khoản từng nạp từ 10 USD). Tên mô hình miễn phí hay đổi, bị gỡ thì báo lỗi 404, hãy chọn mô hình khác.
+- Không dùng `openrouter/auto`: có thể chọn mô hình tính phí.
+- Dữ liệu mẫu gửi cho AI có thể bị nhà cung cấp mô hình miễn phí ghi nhận. Đặt `AI_SAMPLE_ROWS=0` nếu dữ liệu nhạy cảm.

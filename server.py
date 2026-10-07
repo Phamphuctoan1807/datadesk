@@ -25,6 +25,7 @@ AI_MODEL = (os.environ.get("AI_MODEL") or "gemini-flash-latest").strip()
 # mức "suy nghĩ" của AI: mặc định "low" cho Gemini để trả lời nhanh; đặt AI_REASONING=off để không gửi tham số này
 AI_REASON = os.environ.get("AI_REASONING", "low" if "googleapis.com" in AI_URL else "").strip().lower()
 if AI_REASON == "off": AI_REASON = ""
+DEFHINT = " Hoặc xóa hai biến AI_BASE_URL, AI_MODEL để dùng Gemini mặc định." if "googleapis.com" in AI_URL else ""
 ILL = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
 
 def gc():
@@ -498,18 +499,19 @@ def suggest():
         print("AI loi HTTP", e.code, det, flush=True)  # xem trong Logs của Render
         raise ValueError({401: "Khóa AI không hợp lệ hoặc đã bị thu hồi. Hãy tạo khóa mới và dán lại vào AI_API_KEY.",
                           403: "Khóa AI không có quyền dùng mô hình này, hoặc dịch vụ AI chưa mở ở khu vực của máy chủ.",
-                          404: "Không tìm thấy mô hình AI hoặc địa chỉ AI. Kiểm tra AI_MODEL và AI_BASE_URL (xóa hai biến này để dùng mặc định).",
+                          402: "Tài khoản AI cần nạp thêm credit hoặc đang có số dư âm (lỗi 402).",
+                          404: "Không tìm thấy mô hình AI hoặc địa chỉ AI (có thể mô hình đã bị gỡ). Kiểm tra AI_MODEL và AI_BASE_URL." + DEFHINT,
                           429: "AI miễn phí đang quá giới hạn, hãy thử lại sau ít phút."}.get(e.code, "Dịch vụ AI báo lỗi %d: %s" % (e.code, det[:120].replace("\n", " "))))
     except urllib.error.URLError as e:
         print("AI loi mang", repr(e.reason), flush=True)
         if isinstance(e.reason, (TimeoutError, socket.timeout)): raise ValueError("Dịch vụ AI không phản hồi kịp (quá 45 giây). Hãy bấm Gợi ý lại. Nếu vẫn chậm, đổi AI_MODEL sang một mô hình Flash-Lite (xem danh sách tại ai.google.dev).")
-        if isinstance(e.reason, socket.gaierror): raise ValueError("Máy chủ không tìm thấy địa chỉ AI. Kiểm tra AI_BASE_URL (xóa biến này để dùng Gemini mặc định).")
+        if isinstance(e.reason, socket.gaierror): raise ValueError("Máy chủ không tìm thấy địa chỉ AI. Kiểm tra AI_BASE_URL." + DEFHINT)
         raise ValueError("Không kết nối được dịch vụ AI (%s)." % type(e.reason).__name__)
     except (TimeoutError, socket.timeout):
         raise ValueError("Dịch vụ AI không phản hồi kịp (quá 45 giây). Hãy bấm Gợi ý lại. Nếu vẫn chậm, đổi AI_MODEL sang một mô hình Flash-Lite (xem danh sách tại ai.google.dev).")
     except (KeyError, IndexError, TypeError, ValueError) as e:
         print("AI tra ve sai dang", repr(e), flush=True)
-        raise ValueError("AI trả về dữ liệu không đúng dạng. Kiểm tra AI_BASE_URL và AI_MODEL (xóa hai biến này để dùng mặc định).")
+        raise ValueError("AI trả về dữ liệu không đúng dạng. Kiểm tra AI_BASE_URL và AI_MODEL." + DEFHINT)
     except Exception as e:
         print("AI loi khac", repr(e), flush=True)
         raise ValueError("Không kết nối được dịch vụ AI (%s)." % type(e).__name__)
