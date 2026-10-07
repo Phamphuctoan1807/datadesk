@@ -18,6 +18,7 @@ app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax",
                   SESSION_COOKIE_SECURE=os.environ.get("COOKIE_SECURE") == "1", PERMANENT_SESSION_LIFETIME=8 * 3600)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
 FAILS = {}
+RED = "#FF5C5C"  # màu đỏ dùng khi đánh dấu thiếu sót
 AI_KEY = os.environ.get("AI_API_KEY", "")
 AI_URL = os.environ.get("AI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai").rstrip("/")
 AI_MODEL = os.environ.get("AI_MODEL", "gemini-flash-latest")
@@ -85,13 +86,22 @@ def detect(vals):
     return "date" if nd / len(vals) >= .9 else "number" if nn / len(vals) >= .9 else "text"
 
 # ---------- đọc file ----------
-def mk(name, rows, fm=None):
+def mk(name, rows, fm=None, sf=None):
     keep = [i for i, r in enumerate(rows) if any(not blank(x) for x in r)]
     if not keep: return None
     w = max(len(rows[i]) for i in keep)
     R = [[("" if x is None else clean(x)) for x in rows[i]] + [""] * (w - len(rows[i])) for i in keep]
     F = [list(fm[i]) + [None] * (w - len(fm[i])) for i in keep] if fm else None
-    return {"name": name, "rows": R, "fm": F, "dropped": len(rows) - len(keep)}
+    SF = [list(sf[i]) + [None] * (w - len(sf[i])) for i in keep] if sf else None
+    return {"name": name, "rows": R, "fm": F, "sf": SF, "dropped": len(rows) - len(keep)}
+
+def _fill(c):  # màu nền (RGB) đã tô sẵn trong file gốc, để giữ lại khi xuất
+    f = c.fill
+    try:
+        if f.fill_type == "solid" and f.fgColor.type == "rgb" and isinstance(f.fgColor.rgb, str) and len(f.fgColor.rgb) == 8 and f.fgColor.rgb != "00000000":
+            return "#" + f.fgColor.rgb[2:].upper()
+    except Exception: pass
+    return None
 
 def p_xlsx(b):
     wb = openpyxl.load_workbook(io.BytesIO(b), data_only=True)
@@ -99,7 +109,8 @@ def p_xlsx(b):
     for ws in wb.worksheets:
         rows = [[c.value for c in r] for r in ws.iter_rows()]
         fm = [[c.number_format for c in r] for r in ws.iter_rows()]
-        t = mk(ws.title, rows, fm)
+        sf = [[_fill(c) for c in r] for r in ws.iter_rows()]
+        t = mk(ws.title, rows, fm, sf)
         if t: T.append(t)
     return T
 
@@ -171,7 +182,7 @@ def info(t, hdr):
                      "unique": len({disp(v) for v in ne}), "sample": disp(ne[0])[:40] if ne else ""})
     dup = len(body) - len({json.dumps([disp(x) for x in r]) for r in body})
     return {"name": t["name"], "n_rows": len(body), "n_cols": W, "dropped": t["dropped"], "dup": dup,
-            "empty": sum(c["empty"] for c in cols), "header": hdr, "columns": cols,
+            "empty": sum(c["empty"] for c in cols), "colored": sum(1 for r in (t.get("sf") or [])[1 if hdr else 0:] for x in r if x), "header": hdr, "columns": cols,
             "preview": [[disp(x) for x in r] for r in rows[:8]]}
 
 @app.post("/api/analyze")
@@ -181,6 +192,13 @@ def analyze():
     T = parse(f.filename or "file", f.read())
     sid = uuid.uuid4().hex; STORE[sid] = {"t": time.time(), "tables": T, "name": f.filename}
     return jsonify(id=sid, name=f.filename, tables=[info(t, guess_header(t)) for t in T])
+
+@app.get("/api/rows")
+def rows_page():
+    rec = STORE.get(request.args.get("id"))
+    if not rec: raise ValueError("Phiên làm việc đã hết hạn, hãy tải file lên lại.")
+    t = rec["tables"][int(request.args.get("t", 0))]; a = max(0, int(request.args.get("start", 0))); n = max(1, min(200, int(request.args.get("n", 100))))
+    return jsonify(start=a, total=len(t["rows"]), rows=[[disp(x) for x in r] for r in t["rows"][a:a + n]])
 
 @app.get("/api/table")
 def table():
@@ -238,7 +256,7 @@ def write_xlsx(t, outidx, cols, fills, hdr, title):
                 fm = t["fm"][i][c] if t["fm"] else None
                 if fm and fm != "General": cell.number_format = fm
             if (i, c) in fills: cell.fill = PatternFill("solid", fgColor=fills[(i, c)][1:].upper())
-            if hdr and r == 1: cell.font = Font(bold=True); cell.fill = PatternFill("solid", fgColor="E8EDF3")
+            if hdr and r == 1: cell.font = Font(bold=True); cell.fill = PatternFill("solid", fgColor=((t["sf"][0][c] if t.get("sf") else None) or "#E8EDF3")[1:])
     for k, c in enumerate(cols, 1):
         ws.column_dimensions[get_column_letter(k)].width = min(60, max(8, max(len(disp(t["rows"][i][c])) for i in outidx) + 2))
     if hdr: ws.freeze_panes = "A2"; ws.auto_filter.ref = ws.dimensions
@@ -272,6 +290,8 @@ def process():
     if not cols: raise ValueError("Hãy chọn ít nhất một cột để xuất.")
     chk = lambda L: [x for x in L if isinstance(x.get("col"), int) and 0 <= x["col"] < W]
     sorts, hls, flts = chk(p.get("sorts", [])), chk(p.get("highlights", [])), chk(p.get("filters", []))
+    marks = [(m[0], m[1]) for m in (p.get("marks") or [])[:20000]
+             if isinstance(m, list) and len(m) == 2 and all(type(x) is int for x in m) and hdr <= m[0] < len(rows) and 0 <= m[1] < W]
     types = [detect([rows[i][c] for i in body]) for c in range(W)]
     # 1) sắp xếp: bộ xử lý C++ (Python dự phòng nếu chưa biên dịch); ô trống/không đọc được luôn xếp cuối
     levels = []
@@ -293,12 +313,21 @@ def process():
     # 2) tô màu
     def calc_fills(nat_):
         out = {}
+        for m in marks: out[m] = RED  # đánh dấu thủ công có ưu tiên cao nhất
         for r in hls:
             ev = evaluator(rows, r["col"], r["op"], r.get("value", ""), types[r["col"]], body, nat_)
             color = r.get("color") if re.fullmatch(r"#[0-9a-fA-F]{6}", r.get("color", "")) else "#FFE08A"
             for i in body:
                 if ev(i):
                     for c in (range(W) if r.get("scope") == "row" else [r["col"]]): out.setdefault((i, c), color)
+        if p.get("mark_empty"):  # tô đỏ mọi ô trống
+            for i in body:
+                for c in range(W):
+                    if blank(rows[i][c]): out.setdefault((i, c), RED)
+        if t.get("sf"):  # giữ màu đã tô sẵn trong file gốc
+            for i in body:
+                for c in range(W):
+                    if t["sf"][i][c]: out.setdefault((i, c), t["sf"][i][c])
         return out
     fills = calc_fills(True)
     # 3) chọn dòng cần xuất

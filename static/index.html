@@ -40,6 +40,8 @@ th{background:#eef2f7;position:sticky;top:0}.fl td{color:var(--ink)}
 .rt{margin-left:auto;display:flex;gap:12px;align-items:center}.badge{background:#1d2c44;color:#9fb0c6!important;border-radius:999px;padding:3px 11px;font-size:12px!important}
 .lo{background:none;border:1px solid #3a4b66;color:#dbe4f0;border-radius:6px;padding:5px 12px}.lo:hover{background:#1d2c44}
 .sg{display:flex;gap:12px;align-items:center;justify-content:space-between;border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px}.sg small{display:block;color:var(--mute)}
+.gr td{cursor:pointer}.gr td:hover{outline:1px solid var(--acc);outline-offset:-1px}.gr td.mkd{background:#FF5C5C;color:#15202e}.gr td.rn{color:var(--mute);background:#eef2f7;cursor:default;outline:0}
+.add:disabled{opacity:.45;cursor:not-allowed}
 </style></head><body>
 <div class="top"><div class="logo">D</div><b>DataDesk</b><span>Sắp xếp, tô màu và xuất dữ liệu từ file</span><div class="rt"><span class="badge" id="eng"></span><button class="lo" id="out">Đăng xuất</button></div></div>
 <main>
@@ -62,7 +64,9 @@ async function upload(f){
     setInfo(d.tables[0]);msg('');suggest()}catch(e){msg(e.message)}}
 function setInfo(i,keep){ST.info=i;ST.hdr=i.header;ST.res=null;
   if(!keep||!ST.cols||ST.cols.length!==i.columns.length)ST.cols=i.columns.map((_,c)=>c);
-  if(!keep){ST.sorts=[{col:-1,dir:'asc',type:'auto'}];ST.hls=[];ST.flts=[];ST.sug=null}ui()}
+  if(!keep){ST.sorts=[{col:-1,dir:'asc',type:'auto'}];ST.hls=[];ST.flts=[];ST.sug=null;ST.marks=new Set();ST.me=false;ST.grid=null}ui();loadGrid(i.header?1:0)}
+async function loadGrid(start){try{ST.grid=await api(`/api/rows?id=${ST.id}&t=${ST.t}&start=${start}&n=100`);ui()}catch(e){msg(e.message)}}
+function pageGrid(d){loadGrid(Math.max(ST.hdr?1:0,ST.grid.start+d*100))}
 async function loadTable(t,h,keep){try{const i=await api(`/api/table?id=${ST.id}&t=${t}&header=${h?1:0}`);ST.t=t;setInfo(i,keep)}catch(e){msg(e.message)}}
 const D=(k,i,f)=>`data-k="${k}" data-i="${i}" data-f="${f}"`;
 const colSel=(k,i,v)=>`<select ${D(k,i,'col')}><option value="-1">Chọn cột…</option>${ST.info.columns.map((c,n)=>`<option value="${n}"${n==v?' selected':''}>${esc(c.name)}</option>`).join('')}</select>`;
@@ -76,6 +80,7 @@ function ui(){
   <label class="chips" style="margin:0"><span><input type="checkbox" id="hdr"${ST.hdr?' checked':''}> Dòng đầu tiên là tiêu đề cột</span></label></div>
   <div class="stats"><div><b>${I.n_rows}</b>dòng dữ liệu</div><div><b>${I.n_cols}</b>cột</div><div><b>${I.empty}</b>ô trống</div><div><b>${I.dup}</b>dòng trùng hoàn toàn</div></div>
   ${I.dropped?`<p class="hint">${I.dropped} dòng trống hoàn toàn trong file gốc sẽ không đưa vào kết quả.</p>`:''}
+  ${I.colored?`<p class="hint">File gốc có ${I.colored} ô đã tô màu. Các màu này được giữ nguyên khi xuất Excel.</p>`:''}
   <div class="tw"><table><tr><th>Cột</th><th>Kiểu nhận diện</th><th>Ô trống</th><th>Giá trị khác nhau</th><th>Ví dụ</th></tr>${C.map(c=>`<tr><td>${esc(c.name)}</td><td>${TN[c.type]}</td><td>${c.empty}</td><td>${c.unique}</td><td>${esc(c.sample)}</td></tr>`).join('')}</table></div></section>`;
   h+=sug();
   h+=`<section class="card"><h2>Sắp xếp</h2><p class="sub">Có thể xếp nhiều cấp. Ô trống luôn nằm cuối.</p>${ST.sorts.map((s,i)=>`<div class="rw"><b>${i?'Sau đó theo':'Sắp xếp theo'}</b>${colSel('sorts',i,s.col)}
@@ -85,11 +90,12 @@ function ui(){
   h+=`<section class="card"><h2>Tô màu</h2><p class="sub">Ô hoặc dòng thỏa điều kiện sẽ được tô màu trong file Excel. Quy tắc nào khớp trước sẽ được ưu tiên.</p>${ST.hls.map((r,i)=>`<div class="rw"><b>Nếu cột</b>${colSel('hls',i,r.col)}${opSel('hls',r,i)}${valIn('hls',r,i)}
   <input type="color" ${D('hls',i,'color')} value="${r.color}" aria-label="Màu tô"><select ${D('hls',i,'scope')}><option value="row"${r.scope==='row'?' selected':''}>Tô cả dòng</option><option value="cell"${r.scope==='cell'?' selected':''}>Chỉ tô ô</option></select>${rm('hls',i)}</div>`).join('')}
   <button class="add" data-add="hls">+ Thêm quy tắc tô màu</button></section>`;
+  h+=mkCard();
   h+=`<section class="card"><h2>Chọn dữ liệu cần xuất</h2><p class="sub">Chỉ xuất những cột và dòng bạn muốn. Để trống phần lọc nếu muốn xuất tất cả dòng.</p>
   <div class="chips">${C.map((c,n)=>`<label><input type="checkbox" data-col="${n}"${ST.cols.includes(n)?' checked':''}> ${esc(c.name)}</label>`).join('')}</div>
   ${ST.flts.map((r,i)=>`<div class="rw"><b>${i?(ST.mode==='all'?'Và':'Hoặc'):'Chỉ giữ dòng có'}</b>${colSel('flts',i,r.col)}${opSel('flts',r,i)}${valIn('flts',r,i)}${rm('flts',i)}</div>`).join('')}
   <div class="rw"><button class="add" data-add="flts">+ Thêm điều kiện lọc dòng</button>${ST.flts.length>1?`<select id="mode"><option value="all"${ST.mode==='all'?' selected':''}>Dòng phải thỏa tất cả điều kiện</option><option value="any"${ST.mode==='any'?' selected':''}>Dòng thỏa một trong các điều kiện</option></select>`:''}
-  ${ST.hls.length?`<label><input type="checkbox" id="onlyhl"${ST.onlyHl?' checked':''}> Chỉ xuất các dòng được tô màu</label>`:''}</div></section>`;
+  ${ST.hls.length||ST.marks.size||ST.me||I.colored?`<label><input type="checkbox" id="onlyhl"${ST.onlyHl?' checked':''}> Chỉ xuất các dòng có ô được tô màu</label>`:''}</div></section>`;
   h+=`<section class="card"><h2>Xuất file</h2><div class="rw"><select id="fmt"><option value="xlsx"${ST.fmt==='xlsx'?' selected':''}>Excel (.xlsx), giữ màu tô</option><option value="csv"${ST.fmt==='csv'?' selected':''}>CSV (.csv), không có màu</option></select>
   <button class="go" id="go">Xử lý và kiểm tra dữ liệu</button></div><p class="hint">Sau khi xử lý, hệ thống đọc lại file vừa tạo và đối chiếu với file gốc. Chỉ khi mọi bước đạt thì nút tải về mới xuất hiện.</p>${res()}</section>`;
   $('#work').innerHTML=h}
@@ -103,7 +109,7 @@ function res(){const r=ST.res;if(!r)return'';
 async function run(){
   const b=$('#go');b.disabled=true;b.textContent='Đang xử lý và kiểm tra…';
   const ok=L=>L.filter(x=>x.col>=0);
-  try{ST.res=await api('/api/process',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:ST.id,table:ST.t,header:ST.hdr,sorts:ok(ST.sorts),highlights:ok(ST.hls),filters:ok(ST.flts),filter_mode:ST.mode,only_highlighted:ST.onlyHl,columns:ST.cols,format:ST.fmt})})}
+  try{ST.res=await api('/api/process',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:ST.id,table:ST.t,header:ST.hdr,sorts:ok(ST.sorts),highlights:ok(ST.hls),filters:ok(ST.flts),filter_mode:ST.mode,only_highlighted:ST.onlyHl,marks:[...ST.marks].map(k=>k.split(':').map(Number)),mark_empty:ST.me,columns:ST.cols,format:ST.fmt})})}
   catch(e){ST.res={error:e.message}}
   ui();const r=$('#res');if(r)r.scrollIntoView({behavior:'smooth',block:'center'})}
 const W=$('#work');
@@ -114,14 +120,27 @@ W.addEventListener('change',e=>{const el=e.target,d=el.dataset;
   else if(el.id==='hdr')loadTable(ST.t,el.checked,true);
   else if(d.col!==undefined){const c=+d.col;ST.cols=el.checked?[...ST.cols,c].sort((a,b)=>a-b):ST.cols.filter(x=>x!==c);ST.res=null}
   else if(el.id==='mode'){ST.mode=el.value;ST.res=null;ui()}
+  else if(el.id==='me'){ST.me=el.checked;ST.res=null}
   else if(el.id==='onlyhl'){ST.onlyHl=el.checked;ST.res=null}
   else if(el.id==='fmt'){ST.fmt=el.value;ST.res=null}});
-W.addEventListener('click',e=>{const el=e.target.closest('button');if(!el)return;
+W.addEventListener('click',e=>{const td=e.target.closest('td[data-r]');
+  if(td){const k=td.dataset.r+':'+td.dataset.c;ST.marks.has(k)?ST.marks.delete(k):ST.marks.add(k);td.classList.toggle('mkd');ST.res=null;const mc=$('#mc b');if(mc)mc.textContent=ST.marks.size;const rs=$('#res');if(rs)rs.remove();return}
+  const el=e.target.closest('button');if(!el)return;
   if(el.id==='go')run();
+  else if(el.id==='mclr'){ST.marks.clear();ST.res=null;ui()}
+  else if(el.dataset.pg)pageGrid(+el.dataset.pg);
   else if(el.id==='ai')suggest();
   else if(el.dataset.ap!==undefined)applySug(+el.dataset.ap);
   else if(el.dataset.add){const k=el.dataset.add;ST[k].push(k==='sorts'?{col:-1,dir:'asc',type:'auto'}:{col:-1,op:'contains',value:'',color:PAL[ST[k].length%5],scope:'row'});ST.res=null;ui()}
   else if(el.dataset.rm){ST[el.dataset.rm].splice(+el.dataset.i,1);ST.res=null;ui()}});
+function mkCard(){
+  const I=ST.info,G=ST.grid,C=I.columns;let g='<p class="hint">Đang tải dữ liệu…</p>';
+  if(G){const h=ST.hdr?1:0;
+    g=`<div class="tw" style="max-height:340px"><table class="gr"><tr><th>#</th>${C.map(c=>`<th>${esc(c.name)}</th>`).join('')}</tr>${G.rows.map((r,k)=>{const i=G.start+k;return`<tr><td class="rn">${i+1}</td>${r.map((v,c)=>`<td data-r="${i}" data-c="${c}"${ST.marks.has(i+':'+c)?' class="mkd"':''}>${esc(v)}</td>`).join('')}</tr>`}).join('')}</table></div>
+    <div class="rw" style="margin-top:8px"><button class="add" data-pg="-1"${G.start<=h?' disabled':''}>Trang trước</button><button class="add" data-pg="1"${G.start+G.rows.length>=G.total?' disabled':''}>Trang sau</button><span class="hint" style="margin:0">Dòng ${G.start+1} đến ${G.start+G.rows.length} trên ${G.total}</span></div>`}
+  return`<section class="card"><h2>Đánh dấu dữ liệu thiếu (tô đỏ)</h2><p class="sub">Bấm vào ô trong bảng để tô đỏ, bấm lần nữa để bỏ. Ô đỏ giữ nguyên màu trong file Excel xuất ra để đi báo cáo, kể cả sau khi sắp xếp hay lọc.</p>
+  <div class="rw"><label><input type="checkbox" id="me"${ST.me?' checked':''}> Tự động tô đỏ tất cả ô trống (${I.empty} ô)</label></div>${g}
+  <div class="rw" style="margin-top:8px"><span id="mc">Đã đánh dấu thủ công: <b>${ST.marks.size}</b> ô</span><button class="add" id="mclr">Bỏ hết đánh dấu</button></div></section>`}
 let CFG={ai:false,engine:'Python'};
 async function suggest(){
   if(!CFG.ai||!ST)return;
