@@ -55,3 +55,4 @@ Trang giờ nói rõ nguyên nhân. Cách xử lý theo từng thông báo:
 - **Quá giới hạn:** đợi vài phút rồi bấm "Gợi ý lại".
 - **Không phản hồi kịp:** bấm "Gợi ý lại".
 - **Vẫn lỗi:** vào Render, mục Logs, tìm dòng bắt đầu bằng "AI loi" (nội dung không chứa khóa) và gửi cho người hỗ trợ.
+- **"Không phản hồi kịp (quá 45 giây)":** bản mới tự gửi mức suy nghĩ "low" để Gemini trả lời nhanh hơn. Nếu vẫn chậm, đặt biến `AI_MODEL` sang một mô hình Flash-Lite (xem tên chính xác trong danh sách mô hình tại ai.google.dev) hoặc dùng nhà cung cấp khác. Muốn tắt tham số mức suy nghĩ, đặt `AI_REASONING=off`.
