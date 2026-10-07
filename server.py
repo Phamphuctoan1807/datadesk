@@ -335,7 +335,7 @@ def process():
     keep = keep_fn(rows, flts, mode, types, body)
     sel = [i for i in order if keep(i)]
     if p.get("only_highlighted"): sel = [i for i in sel if any((i, c) in fills for c in range(W))]
-    if not sel: raise ValueError("Không có dòng nào thỏa điều kiện đã chọn, hãy nới điều kiện lọc.")
+    if not sel and not hdr: raise ValueError("Không có dòng nào thỏa điều kiện đã chọn, hãy nới điều kiện lọc.")
     outidx = ([0] if hdr else []) + sel
     if fmt == "csv": data = write_csv(t, outidx, cols)
     else: data = write_xlsx(t, outidx, cols, fills, hdr, t["name"])
@@ -385,9 +385,9 @@ def process():
     ok = all(c["ok"] for c in checks)
     base = (rec.get("name") or "file").rsplit(".", 1)[0]
     token = uuid.uuid4().hex
-    if ok: OUT[token] = {"t": time.time(), "data": data, "fmt": fmt, "name": base + "_da-xu-ly." + fmt}
+    OUT[token] = {"t": time.time(), "data": data, "fmt": fmt, "name": base + "_da-xu-ly." + fmt}
     pv = outidx[:101]; pos2 = {i: r for r, i in enumerate(outidx)}
-    return jsonify(ok=ok, engine="C++" if E.native else "Python", checks=checks, token=token if ok else None, filename=base + "_da-xu-ly." + fmt, total=len(outidx) - hdr,
+    return jsonify(ok=ok, engine="C++" if E.native else "Python", checks=checks, token=token, filename=base + "_da-xu-ly." + fmt, total=len(outidx) - hdr,
                    header=hdr == 1, preview=[[disp(rows[i][c]) for c in cols] for i in pv],
                    fills=[[fills.get((i, c)) for c in cols] for i in pv])
 
