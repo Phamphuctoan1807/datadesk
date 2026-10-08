@@ -16,7 +16,7 @@ CMP = ("=", "!=", ">", "<", ">=", "<=")
 ARITY = {"ABS": (1, 1), "ROUND": (1, 2), "CEIL": (1, 1), "FLOOR": (1, 1), "MIN": (1, 99), "MAX": (1, 99), "SUM": (1, 99),
          "AVERAGE": (1, 99), "POWER": (2, 2), "SQRT": (1, 1), "CONCAT": (1, 99), "LEFT": (1, 2), "RIGHT": (1, 2), "MID": (3, 3),
          "LEN": (1, 1), "TRIM": (1, 1), "LOWER": (1, 1), "UPPER": (1, 1), "REPLACE": (4, 4), "SUBSTITUTE": (3, 3), "IF": (3, 3),
-         "AND": (1, 99), "OR": (1, 99), "NOT": (1, 1), "YEAR": (1, 1), "MONTH": (1, 1), "DAY": (1, 1), "ISEMPTY": (1, 1)}
+         "AND": (1, 99), "OR": (1, 99), "NOT": (1, 1), "YEAR": (1, 1), "MONTH": (1, 1), "DAY": (1, 1), "ISEMPTY": (1, 1), "ISNUMBER": (1, 1), "CONTAINS": (2, 2), "STARTSWITH": (2, 2), "ENDSWITH": (2, 2)}
 
 class FormulaError(Exception):
     def __init__(self, code, msg): super().__init__(msg); self.code, self.msg = code, msg
@@ -268,11 +268,14 @@ FN = {"ABS": _num1(abs), "CEIL": _num1(lambda x: float(math.ceil(x))), "FLOOR": 
       "REPLACE": _replace, "SUBSTITUTE": lambda v: txt(v[0]) if txt(v[1]) == "" else txt(v[0]).replace(txt(v[1]), txt(v[2])),
       "AND": _bools(all), "OR": _bools(any), "NOT": _bools(lambda v: not v[0]),
       "YEAR": _dpart(lambda d: d.year), "MONTH": _dpart(lambda d: d.month), "DAY": _dpart(lambda d: d.day),
-      "ISEMPTY": lambda v: v[0] is None or (isinstance(v[0], str) and not v[0].strip())}
+      "ISEMPTY": lambda v: v[0] is None or (isinstance(v[0], str) and not v[0].strip()),
+      "ISNUMBER": lambda v: isnum(v[0]),
+      "CONTAINS": lambda v: txt(v[1]).casefold() in txt(v[0]).casefold(), "STARTSWITH": lambda v: txt(v[0]).casefold().startswith(txt(v[1]).casefold()),
+      "ENDSWITH": lambda v: txt(v[0]).casefold().endswith(txt(v[1]).casefold())}
 
 def ev(n, row):
     k = n[0]
-    if k in ("num", "str", "bool"): return n[1]
+    if k in ("num", "str", "bool", "date"): return n[1]
     if k == "col": return row(n[1])
     if k == "neg":
         x = ev(n[1], row)
@@ -456,7 +459,10 @@ IFN = {"ABS": lambda v: abs(_in(v[0])), "CEIL": lambda v: _in(v[0]).to_integral_
        "SUBSTITUTE": lambda v: itxt(v[0]) if itxt(v[1]) == "" else itxt(v[0]).replace(itxt(v[1]), itxt(v[2])),
        "AND": lambda v: _bl(v, all), "OR": lambda v: _bl(v, any), "NOT": lambda v: _bl(v, lambda x: not x[0]),
        "YEAR": lambda v: _dp(v, lambda d: d.year), "MONTH": lambda v: _dp(v, lambda d: d.month), "DAY": lambda v: _dp(v, lambda d: d.day),
-       "ISEMPTY": lambda v: v[0] is None or (isinstance(v[0], str) and not v[0].strip())}
+       "ISEMPTY": lambda v: v[0] is None or (isinstance(v[0], str) and not v[0].strip()),
+       "ISNUMBER": lambda v: isinstance(v[0], D),
+       "CONTAINS": lambda v: itxt(v[1]).casefold() in itxt(v[0]).casefold(), "STARTSWITH": lambda v: itxt(v[0]).casefold().startswith(itxt(v[1]).casefold()),
+       "ENDSWITH": lambda v: itxt(v[0]).casefold().endswith(itxt(v[1]).casefold())}
 
 def icmp(op, a, b):
     if a is None and b is None: a = b = ""
@@ -498,7 +504,7 @@ def ibin(op, a, b):
 def ieval(n, get):
     k = n[0]
     if k == "num": return D(repr(n[1]))
-    if k in ("str", "bool"): return n[1]
+    if k in ("str", "bool", "date"): return n[1]
     if k == "col": return get(n[1])
     if k == "neg":
         x = ieval(n[1], get)

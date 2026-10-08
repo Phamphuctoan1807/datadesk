@@ -5,6 +5,7 @@ from flask import Flask, request, jsonify, send_file, session, redirect
 from werkzeug.middleware.proxy_fix import ProxyFix
 from engine import Engine, text_keys, nat
 import formula as FX
+import rules as RL
 import openpyxl
 from openpyxl.styles import PatternFill, Font
 from openpyxl.utils import get_column_letter
@@ -318,7 +319,7 @@ def process():
             ok = [i for i in order if ks[i] is not None]; bad = [i for i in order if ks[i] is None]
             ok.sort(key=lambda i: ks[i], reverse=desc); order = ok + bad
     # 2) tô màu
-    def calc_fills(nat_):
+    def calc_fills(nat_, only_high=False):
         out = {}
         for m in marks: out[m] = RED  # đánh dấu thủ công có ưu tiên cao nhất
         for r in hls:
@@ -327,6 +328,8 @@ def process():
             for i in body:
                 if ev(i):
                     for c in (range(W) if r.get("scope") == "row" else [r["col"]]): out.setdefault((i, c), color)
+        if only_high: return out
+        for k_, col_ in (t.get("cfills") or {}).items(): out.setdefault(k_, col_)  # màu từ quy tắc điều kiện
         if p.get("mark_empty"):  # tô đỏ mọi ô trống
             for i in body:
                 for c in range(W):
@@ -389,10 +392,14 @@ def process():
         checks.append(C("Màu tô đúng ô cần tô", want == gfill and fills2 == fills, "%d ô được tô màu, đối chiếu lại từ file xuất." % len(want)))
     elif fills:
         checks.append(C("Tô màu", True, "CSV không lưu được màu. Chọn Excel (.xlsx) để giữ màu tô."))
-    if t.get("derived") and any(c >= t["derived"]["W0"] for c in cols):
-        dv = t["derived"]  # kiểm tra độc lập: tính lại công thức từ dữ liệu gốc bằng bộ tính Decimal rồi so với file đã xuất
-        n_chk, badc = FX.independent_check(rows, dv["W0"], dv["names0"], dv["types0"], dv["cols"], outidx, cols, got, hdr, to_num, to_date, blank)
+    dv = t.get("derived")
+    if dv and dv["cols"] and any(dv["W0"] <= c < dv["W0"] + len(dv["cols"]) for c in cols):  # tính lại công thức từ dữ liệu gốc bằng bộ tính Decimal rồi so với file đã xuất
+        n_chk, badc = FX.independent_check(dv["src"], dv["W0"], dv["names0"], dv["types0"], dv["cols"], outidx, cols, got, hdr, to_num, to_date, blank)
         checks.append(C("Công thức khớp bản tính độc lập", not badc, "Tính lại %d ô công thức bằng bộ tính độc lập từ dữ liệu gốc rồi so với file xuất: %s." % (n_chk, "khớp hoàn toàn" if not badc else "%d ô lệch, ví dụ %s" % (len(badc), badc[0]))))
+    if dv and dv.get("rcfg"):
+        pos_ = {i: r for r, i in enumerate(outidx, 1)}
+        n_r, bad_r = RL.independent_rules_check(dv, outidx, cols, got, gfill, pos_, set(calc_fills(False, True)), [disp(x) for x in rows[0]], fmt == "xlsx", to_num, to_date, blank)
+        checks.append(C("Quy tắc điều kiện khớp bản tính độc lập", not bad_r, "Chạy lại toàn bộ quy tắc từ dữ liệu gốc bằng bộ tính độc lập, đối chiếu %d giá trị và màu trong file xuất: %s." % (n_r, "khớp hoàn toàn" if not bad_r else "%d chỗ lệch, ví dụ %s" % (len(bad_r), bad_r[0]))))
     ok = all(c["ok"] for c in checks)
     base = (rec.get("name") or "file").rsplit(".", 1)[0]
     token = uuid.uuid4().hex
@@ -418,17 +425,36 @@ def _ctype_of(vals):
     return "text"
 
 def derive_table(t, ops):
+    ops = [o for o in ops if o.get("enabled", True)]
     rows = t["rows"]; W0 = len(rows[0]); body = rows[1:]
+    other = [o for o in ops if o.get("type", "FORMULA") not in ("FORMULA", "CONDITIONAL")]
+    if other: return {"errors": [{"code": "UNSUPPORTED_OP", "message": "Loại biến đổi %s chưa được hỗ trợ." % other[0].get("type"), "op_id": other[0].get("id")}]}
+    fops = [o for o in ops if o.get("type", "FORMULA") == "FORMULA"]; rops = [o for o in ops if o.get("type") == "CONDITIONAL"]
     names0 = [disp(x).strip() or "Cột %d" % (c + 1) for c, x in enumerate(rows[0])]
     types = [detect([r[c] for r in body]) for c in range(W0)]
-    d = FX.derive(rows, names0, ops, types, lambda L: E.parse_col(L, "num", to_num), lambda L: E.parse_col(L, "date", to_date))
+    pn, pd = (lambda L: E.parse_col(L, "num", to_num)), (lambda L: E.parse_col(L, "date", to_date))
+    d = FX.derive(rows, names0, fops, types, pn, pd)
     if d["errors"]: return d
     cols = d["cols"]; n = len(cols); fm0 = t["fm"] or [[None] * W0 for _ in rows]
-    d["view"] = {"name": t["name"], "dropped": t["dropped"],
-        "rows": [rows[0] + [c["target"] for c in cols]] + [rows[i + 1] + [c["values"][i] for c in cols] for i in range(len(body))],
-        "fm": [fm0[0] + [None] * n] + [fm0[i + 1] + [("dd/mm/yyyy" if c["date"] else None) for c in cols] for i in range(len(body))],
-        "sf": [t["sf"][i] + [None] * n for i in range(len(rows))] if t.get("sf") else None,
-        "derived": {"W0": W0, "names0": names0, "types0": types, "ctypes": {W0 + j: _ctype_of(c["values"]) for j, c in enumerate(cols)}, "cols": [{"id": c["id"], "target": c["target"], "ast": c["ast"]} for c in cols]}}
+    R_ = [rows[0] + [c["target"] for c in cols]] + [rows[i + 1] + [c["values"][i] for c in cols] for i in range(len(body))]
+    FM = [fm0[0] + [None] * n] + [fm0[i + 1] + [("dd/mm/yyyy" if c["date"] else None) for c in cols] for i in range(len(body))]
+    SF = [t["sf"][i] + [None] * n for i in range(len(rows))] if t.get("sf") else None
+    ctf = {W0 + j: _ctype_of(c["values"]) for j, c in enumerate(cols)}
+    view = {"name": t["name"], "dropped": t["dropped"], "rows": R_, "fm": FM, "sf": SF,
+            "derived": {"W0": W0, "names0": names0, "types0": types, "ctypes": ctf, "src": rows,
+                        "cols": [{"id": c["id"], "target": c["target"], "ast": c["ast"]} for c in cols]}}
+    d["view"] = view
+    if rops:  # quy tắc điều kiện chạy sau công thức, tuần tự, trên bản dẫn xuất
+        names = names0 + [c["target"] for c in cols]; ctypes = types + [ctf[W0 + j] for j in range(n)]; prot = [FX.norm(c["target"]) for c in cols]
+        res = RL.apply_rules(R_, names, ctypes, set(prot), rops, pn, pd, to_num, to_date)
+        if res["errors"]: return res
+        add = len(res["created"])
+        if add:
+            for r_ in FM: r_.extend([None] * add)
+            for r_ in (SF or []): r_.extend([None] * add)
+            for j in range(add): ctf[len(names) + j] = _ctype_of([r_[len(names) + j] for r_ in R_[1:]])
+        view["cfills"] = res["fills"]; d["stats"].update(res["stats"]); d["warnings"] = d["warnings"] + res["warnings"]
+        view["derived"]["rcfg"] = {"rules": rops, "names": names, "ctypes": ctypes, "protected": prot}
     return d
 
 def get_table(rec, ti):
@@ -496,6 +522,58 @@ def formula_api(act):
         return R(True, data=_state(rec, ti, st), warnings=d["warnings"], stats=stats)
     return R(True, data=_preview_data(d, op["id"]) if act == "preview" else {"refs": d["refs"][op["id"]]}, warnings=d["warnings"], stats=stats)
 
+def _rows_of(d, rec, ti): return d["view"]["rows"] if d.get("view") else rec["tables"][ti]["rows"]
+
+def _diff(base, new):
+    bmap = {}
+    for j in range(len(base[0]) - 1, -1, -1): bmap[FX.norm(disp(base[0][j]))] = j
+    cm = [(j, disp(h), bmap.get(FX.norm(disp(h)))) for j, h in enumerate(new[0])]
+    changed = over = 0; cols = []; sample = []
+    for i in range(1, len(new)):
+        ch = {}
+        for j, name, bj in cm:
+            a = new[i][j]; b = base[i][bj] if bj is not None else ""
+            if a != b:
+                changed += 1
+                if not (b is None or (isinstance(b, str) and not b.strip())): over += 1
+                if name not in cols: cols.append(name)
+                ch[name] = (disp(b), disp(a))
+        if ch and len(sample) < 8: sample.append((i + 1, ch))
+    rows = [[rn] + [(("%s → %s" % ch[c]) if ch[c][0] else ch[c][1]) if c in ch else "" for c in cols] for rn, ch in sample]
+    return {"changed": changed, "overwritten": over, "columns": cols, "rows": rows}
+
+def _rule_list(p, st):
+    if not p.get("header"): raise ValueError('Quy tắc cần dòng tiêu đề để gọi tên cột. Hãy bật "Dòng đầu tiên là tiêu đề".')
+    r = p.get("rule") or {}
+    f = {"name": str(r.get("name", ""))[:80], "when": r.get("when") or {}, "then": r.get("then") or [], "else": r.get("else") or []}
+    L = json.loads(json.dumps(st["list"])); oid = p.get("op_id")
+    if oid:
+        op = next((o for o in L if o["id"] == oid), None)
+        if not op: raise ValueError("Không tìm thấy quy tắc cần sửa.")
+        op.update(f); op["enabled"] = True
+    else:
+        op = dict({"id": "rule_%03d" % (1 + max([int(o["id"].split("_")[1]) for o in L] or [0])), "type": "CONDITIONAL", "enabled": True}, **f); L.append(op)
+    return L, op
+
+@app.post("/api/rule/<act>")
+def rule_api(act):
+    if act not in ("validate", "preview", "apply"): raise ValueError("Không có thao tác này.")
+    p = request.get_json(force=True); rec, ti, st = _ctx(p); L, op = _rule_list(p, st); d = _trial(rec, ti, L)
+    if d["errors"]: return R(False, errors=d["errors"])
+    b = _trial(rec, ti, [o for o in st["list"] if o["id"] != op["id"]])  # bảng trước khi thêm hoặc sửa quy tắc này
+    base = _rows_of(b, rec, ti) if not b["errors"] else rec["tables"][ti]["rows"]
+    bf = ((b.get("view") or {}).get("cfills") or {}) if not b["errors"] else {}; nf = d["view"].get("cfills") or {}
+    df = _diff(base, _rows_of(d, rec, ti)); s_ = d["stats"][op["id"]]
+    data = {"matched": s_["matched"], "errors": s_["errors"], "overwritten": df["overwritten"], "new_columns": s_["created"], "changed_cells": df["changed"],
+            "colored_cells": len(set(nf.items()) - set(bf.items())), "columns": df["columns"], "rows": df["rows"]}
+    stats = {"rows": s_["rows"], "matched": s_["matched"]}
+    if act == "apply":
+        if df["overwritten"] and not p.get("confirm"):
+            return R(False, data=data, errors=[{"code": "NEEDS_CONFIRM", "message": "Quy tắc sẽ ghi đè %d ô đang có dữ liệu (chỉ trong kết quả, file gốc không đổi). Hãy xem trước; nếu đồng ý thì xác nhận." % df["overwritten"]}])
+        _commit(st, L); rec.setdefault("cache", {})[ti] = (json.dumps([o for o in L if o.get("enabled", True)], sort_keys=True), d["view"], d["stats"])
+        return R(True, data=_state(rec, ti, st), warnings=d["warnings"], stats=stats)
+    return R(True, data=data if act == "preview" else {"matched": s_["matched"]}, warnings=d["warnings"], stats=stats)
+
 @app.get("/api/transform/state")
 def transform_state():
     rec, ti, st = _ctx(request.args); return R(True, data=_state(rec, ti, st))
@@ -514,7 +592,8 @@ def transform_api(act):
         if a == "delete": L.pop(k)
         elif a == "toggle": L[k]["enabled"] = not L[k].get("enabled", True)
         elif a in ("move_up", "move_down"):
-            j = k - 1 if a == "move_up" else k + 1
+            step = -1 if a == "move_up" else 1; j = k + step
+            while 0 <= j < len(L) and L[j].get("type", "FORMULA") != L[k].get("type", "FORMULA"): j += step  # đổi chỗ với mục cùng loại gần nhất
             if 0 <= j < len(L): L[k], L[j] = L[j], L[k]
         else: raise ValueError("Thao tác không hợp lệ.")
         d = _trial(rec, ti, L)
