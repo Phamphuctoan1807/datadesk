@@ -4,6 +4,7 @@ from collections import Counter
 from flask import Flask, request, jsonify, send_file, session, redirect
 from werkzeug.middleware.proxy_fix import ProxyFix
 from engine import Engine, text_keys, nat
+import formula as FX
 import openpyxl
 from openpyxl.styles import PatternFill, Font
 from openpyxl.utils import get_column_letter
@@ -73,6 +74,7 @@ def tkey(v):
 
 def disp(v):
     if v is None: return ""
+    if isinstance(v, bool): return "TRUE" if v else "FALSE"
     if isinstance(v, dt.datetime): return v.strftime("%d/%m/%Y" if not (v.hour or v.minute or v.second) else "%d/%m/%Y %H:%M")
     if isinstance(v, dt.date): return v.strftime("%d/%m/%Y")
     if isinstance(v, float): return str(int(v)) if v.is_integer() else repr(v)
@@ -182,7 +184,7 @@ def info(t, hdr):
     for c in range(W):
         vals = [r[c] for r in body]; ne = [v for v in vals if not blank(v)]
         nm = disp(rows[0][c]).strip() if hdr else ""
-        cols.append({"name": nm or "Cột %d" % (c + 1), "type": detect(vals), "empty": len(vals) - len(ne),
+        cols.append({"name": nm or "Cột %d" % (c + 1), "type": (t.get("derived") or {}).get("ctypes", {}).get(c) or detect(vals), "empty": len(vals) - len(ne),
                      "unique": len({disp(v) for v in ne}), "sample": disp(ne[0])[:40] if ne else ""})
     dup = len(body) - len({json.dumps([disp(x) for x in r]) for r in body})
     return {"name": t["name"], "n_rows": len(body), "n_cols": W, "dropped": t["dropped"], "dup": dup,
@@ -201,15 +203,15 @@ def analyze():
 def rows_page():
     rec = STORE.get(request.args.get("id"))
     if not rec: raise ValueError("Phiên làm việc đã hết hạn, hãy tải file lên lại.")
-    t = rec["tables"][int(request.args.get("t", 0))]; a = max(0, int(request.args.get("start", 0))); n = max(1, min(200, int(request.args.get("n", 100))))
+    t = get_table(rec, int(request.args.get("t", 0))); a = max(0, int(request.args.get("start", 0))); n = max(1, min(200, int(request.args.get("n", 100))))
     return jsonify(start=a, total=len(t["rows"]), rows=[[disp(x) for x in r] for r in t["rows"][a:a + n]])
 
 @app.get("/api/table")
 def table():
     rec = STORE.get(request.args.get("id")); 
     if not rec: raise ValueError("Phiên làm việc đã hết hạn, hãy tải file lên lại.")
-    t = rec["tables"][int(request.args.get("t", 0))]
-    h = request.args.get("header") == "1"
+    t = get_table(rec, int(request.args.get("t", 0)))
+    h = request.args.get("header") == "1" or bool(t.get("derived"))
     return jsonify(info(t, h))
 
 # ---------- điều kiện (tô màu / lọc) ----------
@@ -287,8 +289,8 @@ def read_back(data, fmt, nrows, ncols):
 def process():
     p = request.get_json(force=True); rec = STORE.get(p.get("id"))
     if not rec: raise ValueError("Phiên làm việc đã hết hạn, hãy tải file lên lại.")
-    t = rec["tables"][int(p.get("table", 0))]; rows = t["rows"]; W = len(rows[0])
-    hdr = 1 if p.get("header") else 0; body = list(range(hdr, len(rows)))
+    t = get_table(rec, int(p.get("table", 0))); rows = t["rows"]; W = len(rows[0])
+    hdr = 1 if (p.get("header") or t.get("derived")) else 0; body = list(range(hdr, len(rows)))
     fmt = "csv" if p.get("format") == "csv" else "xlsx"
     cols = [c for c in dict.fromkeys(p.get("columns") or range(W)) if isinstance(c, int) and 0 <= c < W]
     if not cols: raise ValueError("Hãy chọn ít nhất một cột để xuất.")
@@ -297,6 +299,7 @@ def process():
     marks = [(m[0], m[1]) for m in (p.get("marks") or [])[:20000]
              if isinstance(m, list) and len(m) == 2 and all(type(x) is int for x in m) and hdr <= m[0] < len(rows) and 0 <= m[1] < W]
     types = [detect([rows[i][c] for i in body]) for c in range(W)]
+    for c_, ty_ in ((t.get("derived") or {}).get("ctypes") or {}).items(): types[c_] = ty_  # cột công thức: bỏ qua ô lỗi khi nhận diện kiểu
     # 1) sắp xếp: bộ xử lý C++ (Python dự phòng nếu chưa biên dịch); ô trống/không đọc được luôn xếp cuối
     levels = []
     for s in sorts:
@@ -386,6 +389,10 @@ def process():
         checks.append(C("Màu tô đúng ô cần tô", want == gfill and fills2 == fills, "%d ô được tô màu, đối chiếu lại từ file xuất." % len(want)))
     elif fills:
         checks.append(C("Tô màu", True, "CSV không lưu được màu. Chọn Excel (.xlsx) để giữ màu tô."))
+    if t.get("derived") and any(c >= t["derived"]["W0"] for c in cols):
+        dv = t["derived"]  # kiểm tra độc lập: tính lại công thức từ dữ liệu gốc bằng bộ tính Decimal rồi so với file đã xuất
+        n_chk, badc = FX.independent_check(rows, dv["W0"], dv["names0"], dv["types0"], dv["cols"], outidx, cols, got, hdr, to_num, to_date, blank)
+        checks.append(C("Công thức khớp bản tính độc lập", not badc, "Tính lại %d ô công thức bằng bộ tính độc lập từ dữ liệu gốc rồi so với file xuất: %s." % (n_chk, "khớp hoàn toàn" if not badc else "%d ô lệch, ví dụ %s" % (len(badc), badc[0]))))
     ok = all(c["ok"] for c in checks)
     base = (rec.get("name") or "file").rsplit(".", 1)[0]
     token = uuid.uuid4().hex
@@ -401,6 +408,119 @@ def download(token):
     if not o: raise ValueError("Liên kết tải đã hết hạn, hãy xử lý lại.")
     mime = "text/csv" if o["fmt"] == "csv" else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
     return send_file(io.BytesIO(o["data"]), mimetype=mime, as_attachment=True, download_name=o["name"])
+
+# ---------- biến đổi dữ liệu: công thức (Giai đoạn 1 và 2 của lộ trình) ----------
+# Mô hình dữ liệu: bảng gốc bất biến (rec["tables"]) + nhật ký thao tác (rec["ops"]) -> bảng dẫn xuất (get_table), không sửa bản gốc.
+def _ctype_of(vals):
+    v = [x for x in vals if x != "" and not (isinstance(x, str) and x.startswith("ERROR_"))]
+    if v and all(isinstance(x, (int, float)) and not isinstance(x, bool) for x in v): return "number"
+    if v and all(isinstance(x, dt.datetime) for x in v): return "date"
+    return "text"
+
+def derive_table(t, ops):
+    rows = t["rows"]; W0 = len(rows[0]); body = rows[1:]
+    names0 = [disp(x).strip() or "Cột %d" % (c + 1) for c, x in enumerate(rows[0])]
+    types = [detect([r[c] for r in body]) for c in range(W0)]
+    d = FX.derive(rows, names0, ops, types, lambda L: E.parse_col(L, "num", to_num), lambda L: E.parse_col(L, "date", to_date))
+    if d["errors"]: return d
+    cols = d["cols"]; n = len(cols); fm0 = t["fm"] or [[None] * W0 for _ in rows]
+    d["view"] = {"name": t["name"], "dropped": t["dropped"],
+        "rows": [rows[0] + [c["target"] for c in cols]] + [rows[i + 1] + [c["values"][i] for c in cols] for i in range(len(body))],
+        "fm": [fm0[0] + [None] * n] + [fm0[i + 1] + [("dd/mm/yyyy" if c["date"] else None) for c in cols] for i in range(len(body))],
+        "sf": [t["sf"][i] + [None] * n for i in range(len(rows))] if t.get("sf") else None,
+        "derived": {"W0": W0, "names0": names0, "types0": types, "ctypes": {W0 + j: _ctype_of(c["values"]) for j, c in enumerate(cols)}, "cols": [{"id": c["id"], "target": c["target"], "ast": c["ast"]} for c in cols]}}
+    return d
+
+def get_table(rec, ti):
+    t = rec["tables"][ti]
+    ops = [o for o in rec.get("ops", {}).get(ti, {}).get("list", []) if o.get("enabled", True)]
+    if not ops: return t
+    sig = json.dumps(ops, sort_keys=True); c = rec.setdefault("cache", {}).get(ti)
+    if c and c[0] == sig: return c[1]
+    d = derive_table(t, ops)
+    if d["errors"]: raise ValueError(d["errors"][0]["message"])
+    rec["cache"][ti] = (sig, d["view"], d["stats"]); return d["view"]
+
+def R(ok, data=None, warnings=None, errors=None, stats=None, code=None):  # định dạng phản hồi thống nhất
+    return jsonify(success=ok, warnings=warnings or [], errors=errors or [], stats=stats or {}, data=data or {}), (code or (200 if ok else 400))
+
+def _ctx(p):
+    rec = STORE.get(p.get("id"))
+    if not rec: raise ValueError("Phiên làm việc đã hết hạn, hãy tải file lên lại.")
+    ti = int(p.get("table", 0)); rec["tables"][ti]
+    return rec, ti, rec.setdefault("ops", {}).setdefault(ti, {"list": [], "undo": [], "redo": []})
+
+def _state(rec, ti, st):
+    try: get_table(rec, ti)
+    except ValueError: pass
+    c = rec.get("cache", {}).get(ti); stats = c[2] if c else {}
+    return {"list": [dict(o, stats=stats.get(o["id"])) for o in st["list"]], "can_undo": bool(st["undo"]), "can_redo": bool(st["redo"])}
+
+def _commit(st, new):
+    st["undo"].append(json.loads(json.dumps(st["list"]))); del st["undo"][:-50]; st["redo"] = []; st["list"] = new
+
+def _trial(rec, ti, lst):
+    if not any(o.get("enabled", True) for o in lst): return {"errors": [], "warnings": [], "stats": {}, "cols": []}
+    return derive_table(rec["tables"][ti], lst)
+
+def _formula_list(p, st):
+    if not p.get("header"): raise ValueError('Công thức cần dòng tiêu đề để gọi tên cột. Hãy bật "Dòng đầu tiên là tiêu đề".')
+    target = str(p.get("target", "")).strip(); expr = str(p.get("expression", ""))
+    L = json.loads(json.dumps(st["list"])); oid = p.get("op_id")
+    if oid:
+        op = next((o for o in L if o["id"] == oid), None)
+        if not op: raise ValueError("Không tìm thấy công thức cần sửa.")
+        op["target"], op["expression"], op["enabled"] = target, expr, True
+    else:
+        op = {"id": "rule_%03d" % (1 + max([int(o["id"].split("_")[1]) for o in L] or [0])), "type": "FORMULA", "target": target, "expression": expr, "enabled": True}
+        L.append(op)
+    return L, op
+
+def _preview_data(d, oid):
+    hdr = d["view"]["rows"][0]; tg = next(c["target"] for c in d["cols"] if c["id"] == oid); idx = []
+    for r in d["refs"][oid] + [tg]:
+        k = next((j for j, h in enumerate(hdr) if FX.norm(disp(h)) == FX.norm(r)), None)
+        if k is not None and k not in idx: idx.append(k)
+    return {"columns": [disp(hdr[k]) for k in idx], "rows": [[disp(r[k]) for k in idx] for r in d["view"]["rows"][1:9]],
+            "error_counts": d["stats"][oid]["errors"], "refs": d["refs"][oid]}
+
+@app.post("/api/formula/<act>")
+def formula_api(act):
+    if act not in ("validate", "preview", "apply"): raise ValueError("Không có thao tác này.")
+    p = request.get_json(force=True); rec, ti, st = _ctx(p); L, op = _formula_list(p, st); d = _trial(rec, ti, L)
+    if d["errors"]: return R(False, errors=d["errors"])
+    stats = {"rows": len(rec["tables"][ti]["rows"]) - 1, "formula_errors": sum(d["stats"][op["id"]]["errors"].values())}
+    if act == "apply":
+        _commit(st, L)
+        if d.get("view"): rec.setdefault("cache", {})[ti] = (json.dumps([o for o in L if o.get("enabled", True)], sort_keys=True), d["view"], d["stats"])
+        return R(True, data=_state(rec, ti, st), warnings=d["warnings"], stats=stats)
+    return R(True, data=_preview_data(d, op["id"]) if act == "preview" else {"refs": d["refs"][op["id"]]}, warnings=d["warnings"], stats=stats)
+
+@app.get("/api/transform/state")
+def transform_state():
+    rec, ti, st = _ctx(request.args); return R(True, data=_state(rec, ti, st))
+
+@app.post("/api/transform/<act>")
+def transform_api(act):
+    p = request.get_json(force=True); rec, ti, st = _ctx(p)
+    if act in ("undo", "redo"):
+        a, b = ("undo", "redo") if act == "undo" else ("redo", "undo")
+        if not st[a]: return R(False, errors=[{"code": "NOTHING", "message": "Không còn thao tác để %s." % ("hoàn tác" if act == "undo" else "làm lại")}])
+        st[b].append(st["list"]); st["list"] = st[a].pop(); return R(True, data=_state(rec, ti, st))
+    if act == "update":
+        L = json.loads(json.dumps(st["list"])); k = next((i for i, o in enumerate(L) if o["id"] == p.get("op_id")), None)
+        if k is None: raise ValueError("Không tìm thấy công thức.")
+        a = p.get("action")
+        if a == "delete": L.pop(k)
+        elif a == "toggle": L[k]["enabled"] = not L[k].get("enabled", True)
+        elif a in ("move_up", "move_down"):
+            j = k - 1 if a == "move_up" else k + 1
+            if 0 <= j < len(L): L[k], L[j] = L[j], L[k]
+        else: raise ValueError("Thao tác không hợp lệ.")
+        d = _trial(rec, ti, L)
+        if d["errors"]: return R(False, errors=d["errors"])
+        _commit(st, L); return R(True, data=_state(rec, ti, st))
+    raise ValueError("Không có thao tác này.")
 
 # ---------- đăng nhập và bảo mật ----------
 @app.before_request
@@ -472,7 +592,7 @@ def suggest():
     if not AI_KEY: raise ValueError("Chưa cấu hình AI_API_KEY trên máy chủ nên chưa dùng được gợi ý AI.")
     p = request.get_json(force=True); rec = STORE.get(p.get("id"))
     if not rec: raise ValueError("Phiên làm việc đã hết hạn, hãy tải file lên lại.")
-    t = rec["tables"][int(p.get("table", 0))]; hdr = bool(p.get("header")); I = info(t, hdr)
+    t = get_table(rec, int(p.get("table", 0))); hdr = bool(p.get("header")) or bool(t.get("derived")); I = info(t, hdr)
     nrow = max(0, min(int(os.environ.get("AI_SAMPLE_ROWS", "6")), 10))
     cols = [{"index": i, "name": c["name"], "type": c["type"], "empty": c["empty"], "unique": c["unique"]} for i, c in enumerate(I["columns"])]
     sample = [[disp(x)[:40] for x in r] for r in t["rows"][1 if hdr else 0:][:nrow]]
