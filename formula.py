@@ -16,7 +16,7 @@ CMP = ("=", "!=", ">", "<", ">=", "<=")
 ARITY = {"ABS": (1, 1), "ROUND": (1, 2), "CEIL": (1, 1), "FLOOR": (1, 1), "MIN": (1, 99), "MAX": (1, 99), "SUM": (1, 99),
          "AVERAGE": (1, 99), "POWER": (2, 2), "SQRT": (1, 1), "CONCAT": (1, 99), "LEFT": (1, 2), "RIGHT": (1, 2), "MID": (3, 3),
          "LEN": (1, 1), "TRIM": (1, 1), "LOWER": (1, 1), "UPPER": (1, 1), "REPLACE": (4, 4), "SUBSTITUTE": (3, 3), "IF": (3, 3),
-         "AND": (1, 99), "OR": (1, 99), "NOT": (1, 1), "YEAR": (1, 1), "MONTH": (1, 1), "DAY": (1, 1), "ISEMPTY": (1, 1), "ISNUMBER": (1, 1), "CONTAINS": (2, 2), "STARTSWITH": (2, 2), "ENDSWITH": (2, 2)}
+         "AND": (1, 99), "OR": (1, 99), "NOT": (1, 1), "YEAR": (1, 1), "MONTH": (1, 1), "DAY": (1, 1), "ISEMPTY": (1, 1), "ISNUMBER": (1, 1), "ISDATE": (1, 1), "CONTAINS": (2, 2), "STARTSWITH": (2, 2), "ENDSWITH": (2, 2)}
 
 class FormulaError(Exception):
     def __init__(self, code, msg): super().__init__(msg); self.code, self.msg = code, msg
@@ -269,7 +269,7 @@ FN = {"ABS": _num1(abs), "CEIL": _num1(lambda x: float(math.ceil(x))), "FLOOR": 
       "AND": _bools(all), "OR": _bools(any), "NOT": _bools(lambda v: not v[0]),
       "YEAR": _dpart(lambda d: d.year), "MONTH": _dpart(lambda d: d.month), "DAY": _dpart(lambda d: d.day),
       "ISEMPTY": lambda v: v[0] is None or (isinstance(v[0], str) and not v[0].strip()),
-      "ISNUMBER": lambda v: isnum(v[0]),
+      "ISNUMBER": lambda v: isnum(v[0]), "ISDATE": lambda v: isdate(v[0]),
       "CONTAINS": lambda v: txt(v[1]).casefold() in txt(v[0]).casefold(), "STARTSWITH": lambda v: txt(v[0]).casefold().startswith(txt(v[1]).casefold()),
       "ENDSWITH": lambda v: txt(v[0]).casefold().endswith(txt(v[1]).casefold())}
 
@@ -294,8 +294,31 @@ def ev(n, row):
     return FN[f](vals)
 
 # ---------------- dữ liệu cột có kiểu ----------------
-def typed_source(vals, ctype, pn, pd):
-    """Ô trống -> None, số/ngày giữ nguyên kiểu. Chuỗi chỉ được đọc thành số/ngày khi cả cột được nhận diện là số/ngày."""
+AMB = re.compile(r"[+-]?\d{1,3}[.,]\d{3}")
+_CUR = re.compile(r"\s|₫|đ|\$|€|%|VND|VNĐ", re.I)
+VI_EV = [re.compile(p) for p in (r"[+-]?\d+,\d{1,2}", r"[+-]?\d{1,3}(?:\.\d{3})+,\d+", r"[+-]?\d{1,3}(?:\.\d{3}){2,}")]
+EN_EV = [re.compile(p) for p in (r"[+-]?\d+\.\d{1,2}", r"[+-]?\d{1,3}(?:,\d{3})+\.\d+", r"[+-]?\d{1,3}(?:,\d{3}){2,}")]
+
+def number_plan(strs, numfmt):
+    """Giá trị mơ hồ như 1.234 hoặc 1,234 (là 1234 hay 1,234?). numfmt: 'vi' (1.234 = 1234), 'en' (1.234 = 1,234) hoặc 'auto'
+    (suy ra từ các ô khác trong cột; không đủ bằng chứng thì KHÔNG tự chuyển). Trả về ({vị trí: số hoặc None}, cách đọc, số ô mơ hồ)."""
+    st = [_CUR.sub("", s) for s in strs]; amb = [i for i, s in enumerate(st) if AMB.fullmatch(s)]
+    if not amb: return {}, "none", 0
+    loc = numfmt if numfmt in ("vi", "en") else None
+    if loc is None:
+        vi = any(p.fullmatch(s) for s in st for p in VI_EV); en = any(p.fullmatch(s) for s in st for p in EN_EV)
+        loc = "vi" if vi and not en else "en" if en and not vi else None
+    out = {}
+    for i in amb:
+        if loc is None: out[i] = None; continue
+        core = st[i].lstrip("+-"); sep = "." if "." in core else ","; a, b = core.split(sep)
+        v = float(a + b) if (sep == "." and loc == "vi") or (sep == "," and loc == "en") else float(a + "." + b)
+        out[i] = -v if st[i].startswith("-") else v
+    return out, loc or "unknown", len(amb)
+
+def typed_column(vals, ctype, pn, pd, numfmt="auto"):
+    """Ô trống -> None, số/ngày giữ nguyên kiểu. Chuỗi chỉ được đọc thành số/ngày khi cả cột được nhận diện là số/ngày;
+    giá trị số mơ hồ không đủ bằng chứng thì giữ nguyên là chữ (báo ERROR_TYPE khi tính). Trả về (danh sách, thông tin)."""
     out = [None] * len(vals); idx = []
     for i, v in enumerate(vals):
         if v is None or (isinstance(v, str) and not v.strip()): continue
@@ -303,13 +326,21 @@ def typed_source(vals, ctype, pn, pd):
         elif isinstance(v, (int, float)): out[i] = float(v)
         elif isinstance(v, dt.datetime): out[i] = v.date()
         elif isinstance(v, dt.date): out[i] = v
-        else: out[i] = v if isinstance(v, str) else str(v); idx.append(i) if isinstance(v, str) else None
+        elif isinstance(v, str): out[i] = v; idx.append(i)
+        else: out[i] = str(v)
+    info = {"bad": 0, "mixed": False, "amb": 0, "amb_unresolved": 0, "loc": "none"}
     if idx and ctype in ("number", "date"):
-        res = (pn if ctype == "number" else pd)([out[i] for i in idx])
-        for i, r in zip(idx, res):
-            if r is not None: out[i] = float(r) if ctype == "number" else dt.date.fromordinal(int(r))
-    bad = sum(1 for i in idx if isinstance(out[i], str)) if ctype in ("number", "date") else 0
-    return out, bad
+        strs = [out[i] for i in idx]; plan = {}
+        if ctype == "number": plan, info["loc"], info["amb"] = number_plan(strs, numfmt)
+        rest = [k for k in range(len(idx)) if k not in plan]
+        for k, r in zip(rest, (pn if ctype == "number" else pd)([strs[k] for k in rest])):
+            if r is not None: out[idx[k]] = float(r) if ctype == "number" else dt.date.fromordinal(int(r))
+        for k, v in plan.items():
+            if v is None: info["amb_unresolved"] += 1
+            else: out[idx[k]] = v
+        info["bad"] = sum(1 for i in idx if isinstance(out[i], str))
+    elif ctype == "text": info["mixed"] = any(isinstance(v, float) for v in out) and any(isinstance(v, str) for v in out)
+    return out, info
 
 def cellval(v):
     if isinstance(v, Err): return v.code
@@ -325,8 +356,14 @@ def _cycle(deps, nodes):
         seen.append(cur); cur = next(d for d in deps[cur] if d in nodes)
     return seen[seen.index(cur):] + [cur]
 
-def derive(rows, names0, ops, types, pn, pd):
-    """Tạo các cột công thức từ dữ liệu gốc (không sửa rows). Trả về errors (nghiêm trọng) hoặc cols, order, stats, warnings."""
+def _show(v):
+    if v is None: return "(trống)"
+    if isinstance(v, Err): return v.code
+    return v if isinstance(v, str) else str(txt(v))
+
+def derive(n, names0, ops, typed_fn):
+    """Tính các cột công thức. n: số dòng dữ liệu; names0: tên mọi cột hiện có; typed_fn(c): danh sách giá trị có kiểu của cột c.
+    Trả về errors (nghiêm trọng) hoặc cols, order, stats, warnings, errlog (báo cáo lỗi từng ô)."""
     errors, warnings = [], []
     def bad(code, msg, o=None): errors.append({"code": code, "message": msg, "op_id": o.get("id") if o else None})
     en = [o for o in ops if o.get("enabled", True)]
@@ -359,7 +396,7 @@ def derive(rows, names0, ops, types, pn, pd):
             bad("CIRCULAR_DEPENDENCY", "Phát hiện công thức tham chiếu vòng: " + " → ".join(label[x] for x in _cycle(deps, left)))
             return {"errors": errors}
         order.append(pick); left.remove(pick)
-    body = rows[1:]; n = len(body); srcT, res, stats = {}, {}, {}
+    srcT, res, stats, elog = {}, {}, {}, []
     byname = {}
     for c in range(len(names0) - 1, -1, -1): byname[norm(names0[c])] = c
     for nm, k in Counter(norm(x) for x in names0).items():
@@ -367,25 +404,40 @@ def derive(rows, names0, ops, types, pn, pd):
     def getcol(key):
         if key in tmap: return res[tmap[key]]
         c = byname[key]
-        if c not in srcT:
-            srcT[c], nbad = typed_source([r[c] for r in body], types[c], pn, pd)
-            if types[c] == "text" and any(isinstance(v, float) for v in srcT[c]) and any(isinstance(v, str) for v in srcT[c]):
-                warnings.append('Cột "%s" vừa có số vừa có chữ: các ô chữ báo ERROR_TYPE khi dùng trong phép tính.' % names0[c])
-            if nbad: warnings.append('Cột "%s" chứa %d giá trị không thể đọc thành %s; các ô đó báo ERROR_TYPE khi dùng trong phép tính.' % (names0[c], nbad, "số" if types[c] == "number" else "ngày"))
+        if c not in srcT: srcT[c] = typed_fn(c)
         return srcT[c]
     for oid in order:
-        ast = asts[oid]; L = {r: getcol(norm(r)) for r in refs[oid]}; out = []; cnt = Counter()
+        ast = asts[oid]; L = {r: getcol(norm(r)) for r in refs[oid]}; out = []; cnt = Counter(); logged = 0
         try:
             for i in range(n):
                 v = ev(ast, lambda nm, i=i: L[nm][i])
-                if isinstance(v, Err): cnt[v.code] += 1
+                if isinstance(v, Err):
+                    cnt[v.code] += 1
+                    if logged < 100:
+                        logged += 1; elog.append({"op_id": oid, "target": label[oid], "row": i, "code": v.code, "inputs": "; ".join("%s = %s" % (r_, _show(L[r_][i])) for r_ in refs[oid])})
                 out.append(v)
         except RecursionError:
             bad("ERROR_SYNTAX", "%s: Công thức quá phức tạp để tính." % label[oid]); return {"errors": errors}
         res[oid] = out; stats[oid] = {"errors": dict(cnt), "rows": n}
-    cols = [{"id": o["id"], "target": t, "values": [cellval(v) for v in res[o["id"]]], "date": any(isdate(v) for v in res[o["id"]]), "ast": asts[o["id"]]}
-            for o, t in zip(en, targets)]
-    return {"errors": [], "warnings": warnings, "cols": cols, "order": order, "stats": stats, "refs": refs}
+    cols = [{"id": o["id"], "target": t, "values": [cellval(v) for v in res[o["id"]]], "typed": [v.code if isinstance(v, Err) else v for v in res[o["id"]]],
+             "date": any(isdate(v) for v in res[o["id"]]), "ast": asts[o["id"]]} for o, t in zip(en, targets)]
+    return {"errors": [], "warnings": warnings, "cols": cols, "order": order, "stats": stats, "refs": refs, "errlog": elog}
+
+# ---------------- giao diện hàm nội bộ (mục 50 của lộ trình) ----------------
+def parse_formula(expression, names):
+    """Chuỗi công thức -> cây cú pháp. names: danh sách tên cột. Ném FormulaError nếu sai cú pháp."""
+    return parse(expression, _pats(names))
+def validate_formula(ast, names):
+    """Kiểm tra cột và hàm tồn tại, đủ đối số. Trả về danh sách cột được dùng."""
+    return analyze(ast, {norm(x) for x in names})
+def evaluate_formula(ast, row):
+    """Tính một dòng. row: hàm (tên cột) -> giá trị có kiểu. Trả về (giá trị, mã lỗi hoặc None, cảnh báo hoặc None)."""
+    v = ev(ast, row)
+    return (None, v.code, None) if isinstance(v, Err) else (v, None, None)
+def evaluate_batch(ast, dataset):
+    """dataset: {tên cột: danh sách giá trị có kiểu}. Trả về danh sách (giá trị, mã lỗi, cảnh báo) cho từng dòng."""
+    n = len(next(iter(dataset.values()))) if dataset else 0
+    return [evaluate_formula(ast, lambda nm, i=i: dataset[nm][i]) for i in range(n)]
 
 # ---------------- bộ tính độc lập (kiểm tra lại) ----------------
 def iclean(r):
@@ -460,7 +512,7 @@ IFN = {"ABS": lambda v: abs(_in(v[0])), "CEIL": lambda v: _in(v[0]).to_integral_
        "AND": lambda v: _bl(v, all), "OR": lambda v: _bl(v, any), "NOT": lambda v: _bl(v, lambda x: not x[0]),
        "YEAR": lambda v: _dp(v, lambda d: d.year), "MONTH": lambda v: _dp(v, lambda d: d.month), "DAY": lambda v: _dp(v, lambda d: d.day),
        "ISEMPTY": lambda v: v[0] is None or (isinstance(v[0], str) and not v[0].strip()),
-       "ISNUMBER": lambda v: isinstance(v[0], D),
+       "ISNUMBER": lambda v: isinstance(v[0], D), "ISDATE": lambda v: isinstance(v[0], dt.date),
        "CONTAINS": lambda v: itxt(v[1]).casefold() in itxt(v[0]).casefold(), "STARTSWITH": lambda v: itxt(v[0]).casefold().startswith(itxt(v[1]).casefold()),
        "ENDSWITH": lambda v: itxt(v[0]).casefold().endswith(itxt(v[1]).casefold())}
 
@@ -547,27 +599,38 @@ def same(e, g):
     if e is None: return g in (None, "")
     return (g if g is not None else "") == e
 
-def independent_check(rows, W0, names0, types0, cols, outidx, outcols, got, hdr, to_num, to_date, blank):
-    """Tính lại từng ô công thức bằng bộ tính độc lập từ dữ liệu gốc, rồi so với giá trị đọc lại từ file đã xuất."""
-    byname = {}
-    for c in range(len(names0) - 1, -1, -1): byname[norm(names0[c])] = c
-    astof = {norm(c["target"]): c["ast"] for c in cols}; pos = {c: k for k, c in enumerate(outcols)}
-    checked, bad = 0, []
-    with localcontext(Context(prec=40)):
-        for r, i in enumerate(outidx):
-            if i < hdr: continue
-            memo = {}
-            def get(name, i=i, memo=memo):
-                key = norm(name)
-                if key in memo: return memo[key]
-                if key in astof: v = ieval(astof[key], get)
-                else: c = byname[key]; v = ityped(rows[i][c], types0[c], to_num, to_date, blank)
-                memo[key] = v; return v
-            for j, c in enumerate(cols):
-                if W0 + j not in pos: continue
-                try: exp = get(c["target"])
-                except Raise as e: exp = e.code
-                except ArithmeticError: exp = "ERROR_OVERFLOW"
-                g = got[r][pos[W0 + j]]; checked += 1
-                if not same(exp, g): bad.append('dòng %d, cột "%s": cần %s, file có %s' % (i + 1, c["target"], exp, g))
-    return checked, bad
+def inumber_plan(strs, numfmt):
+    """Bản cài độc lập của number_plan (dùng Decimal)."""
+    cl = [re.sub(r"\s|₫|đ|\$|€|%|VND|VNĐ", "", s, flags=re.I) for s in strs]
+    amb = {}
+    for i, s in enumerate(cl):
+        m = re.fullmatch(r"([+-]?)(\d{1,3})([.,])(\d{3})", s)
+        if m: amb[i] = m.groups()
+    if not amb: return {}
+    if numfmt in ("vi", "en"): loc = numfmt
+    else:
+        vi = en = False
+        for s in cl:
+            if re.fullmatch(r"[+-]?\d+,\d{1,2}", s) or re.fullmatch(r"[+-]?\d{1,3}(\.\d{3})+,\d+", s) or re.fullmatch(r"[+-]?\d{1,3}(\.\d{3}){2,}", s): vi = True
+            if re.fullmatch(r"[+-]?\d+\.\d{1,2}", s) or re.fullmatch(r"[+-]?\d{1,3}(,\d{3})+\.\d+", s) or re.fullmatch(r"[+-]?\d{1,3}(,\d{3}){2,}", s): en = True
+        loc = "vi" if vi and not en else ("en" if en and not vi else None)
+    out = {}
+    for i, (sign, a, sep, b) in amb.items():
+        if loc is None: out[i] = None; continue
+        v = D(a + b) if (loc == "vi") == (sep == ".") else D(a + "." + b)
+        out[i] = -v if sign == "-" else v
+    return out
+
+def ityped_col(vals, ctype, numfmt, to_num, to_date, blank):
+    out = [ityped(v, None, to_num, to_date, blank) for v in vals]
+    idx = [i for i, v in enumerate(vals) if isinstance(v, str) and not blank(v)]
+    if ctype == "number" and idx:
+        plan = inumber_plan([vals[i] for i in idx], numfmt)
+        for k, i in enumerate(idx):
+            if k in plan: out[i] = plan[k] if plan[k] is not None else vals[i]
+            else:
+                x = to_num(vals[i]); out[i] = D(repr(x)) if x is not None else vals[i]
+    elif ctype == "date":
+        for i in idx:
+            o = to_date(vals[i]); out[i] = dt.date.fromordinal(int(o)) if o is not None else vals[i]
+    return out

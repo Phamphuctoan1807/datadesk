@@ -3,6 +3,10 @@
 ## Các file
 - `engine.cpp`: bộ xử lý C++ (đọc số/ngày, sắp xếp nhiều cấp, phát hiện trùng, so sánh số)
 - `engine.py`: cầu nối Python gọi C++ (ctypes). Chưa biên dịch C++ thì tự dùng bản Python dự phòng
+- `formula.py`, `rules.py`, `pipeline.py`: công thức, quy tắc điều kiện và quy trình biến đổi (kèm bộ kiểm tra độc lập)
+- `check_files.py`: kiểm tra đủ file khi build trên Render
+- `tests/`: bộ kiểm thử (không cần cho việc chạy web)
+- `TIEN-DO.md`: đối chiếu với lộ trình
 - `server.py`: máy chủ Flask (đăng nhập, API, đọc/ghi Excel, kiểm tra độc lập, gọi AI)
 - `static/`: giao diện (`index.html`, `login.html`)
 - `Dockerfile`, `render.yaml`: để đưa lên internet
@@ -67,3 +71,27 @@ Trang giờ nói rõ nguyên nhân. Cách xử lý theo từng thông báo:
 - Giới hạn miễn phí theo tài liệu OpenRouter: 20 lượt mỗi phút, 50 lượt mỗi ngày (1.000 lượt nếu tài khoản từng nạp từ 10 USD). Tên mô hình miễn phí hay đổi, bị gỡ thì báo lỗi 404, hãy chọn mô hình khác.
 - Không dùng `openrouter/auto`: có thể chọn mô hình tính phí.
 - Dữ liệu mẫu gửi cho AI có thể bị nhà cung cấp mô hình miễn phí ghi nhận. Đặt `AI_SAMPLE_ROWS=0` nếu dữ liệu nhạy cảm.
+
+## 8. Kiểm tra bản mới đã chạy chưa
+1. Mở `https://tên-của-bạn.onrender.com/version` (không cần đăng nhập). Phải thấy `"version": "2026.10.09-gd3.2"` hoặc số mới hơn. Không thấy hoặc thấy số cũ nghĩa là web chưa được cập nhật.
+2. Sau khi đăng nhập, góc trên bên phải có chữ `Bộ xử lý: C++ | v2026...` (trên điện thoại nằm hàng dưới tên DataDesk). Trang đăng nhập cũng ghi "Phiên bản ..." ở cuối.
+3. Các mục mới (Quy trình biến đổi, Thêm công thức, Thêm quy tắc điều kiện) **chỉ hiện sau khi bạn tải một file lên**, nằm ngay dưới phần "Kết quả rà soát".
+4. Nếu vẫn là bản cũ, vào Render, mục **Events**: xem lần deploy mới nhất là Live hay Failed. Mục **Logs** nếu lỗi sẽ ghi "THIEU FILE: ..." (thiếu file nào) hoặc lỗi cài đặt.
+   Render **giữ nguyên bản cũ đang chạy** khi bản mới build lỗi, nên web trông như không đổi gì.
+5. Nguyên nhân hay gặp: chỉ tải lên vài file thay vì tất cả (thiếu `formula.py`, `rules.py`, `pipeline.py`, `check_files.py`); tải nguyên file `.zip` lên GitHub mà chưa giải nén; file nằm trong thư mục con `datadesk/` nên `Dockerfile` không nằm ở ngoài cùng; tắt Auto-Deploy (khi đó bấm Manual Deploy).
+
+## 9. Cập nhật thư mục tests trên GitHub
+Thư mục `tests` chỉ để kiểm thử trên máy bạn. **Web trên Render không cần nó** (đã loại khỏi bản build bằng `.dockerignore`), nên không cập nhật cũng không ảnh hưởng web. Muốn đưa lên GitHub để lưu cùng dự án:
+- Cách 1 (máy tính): vào repository, bấm **Add file, Upload files**, mở thư mục `datadesk` đã giải nén và kéo **cả thư mục `tests`** vào trang (Chrome hoặc Edge hỗ trợ kéo thả thư mục). Bấm **Commit changes**.
+- Cách 2 (từng file, dùng được trên điện thoại): bấm **Add file, Create new file**, ở ô tên gõ `tests/test_pipeline.py` (gõ dấu `/` GitHub tự tạo thư mục), dán nội dung file vào, bấm **Commit changes**. Lặp lại cho `test_units.py`, `test_golden.py`, `test_formula.py`, `test_rules.py`, `test_integration.py`, `test_core.py`, `test_ui.py`, `run_all.py`, `make_datasets.py`.
+- Thư mục con `tests/datasets` và `tests/golden` cũng cần cho `test_golden.py`: tạo lại bằng `python tests/make_datasets.py` (sinh `datasets`), còn `golden` là các file `.json` tải theo Cách 1.
+- File trùng tên sẽ được thay bằng bản mới. Nếu còn file test cũ không còn trong gói, xóa tay trên GitHub (mở file, bấm biểu tượng thùng rác).
+
+## 10. Chạy kiểm thử trên máy
+Trong VS Code, mở thư mục `datadesk`, mở terminal rồi gõ:
+```
+pip install -r requirements.txt
+python tests/make_datasets.py
+python tests/run_all.py --fast
+```
+Cuối bảng phải ghi `TỔNG: 8/8 bộ đạt`. `test_ui` cần thêm `pip install playwright` rồi `playwright install chromium`; chưa cài thì bộ này tự bỏ qua và vẫn tính là đạt.
