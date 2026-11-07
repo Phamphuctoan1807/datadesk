@@ -2145,11 +2145,7 @@ async function mgExecute(){
     if(r.success){
       const stats=r.data.stats||{};
       const rowMsg = mode==='UNION' ? ('Tổng '+(stats.total_rows||r.data.rows||'')+ ' dòng') : ('Khớp '+(r.data.matched_rows||stats.matched_rows||0)+' dòng');
-      alert('✓ Gộp bảng thành công!
-- Tên bảng mới: '+r.data.name+'
-- Thống kê: '+rowMsg+'
-
-Bảng mới đã được tự động thêm vào phiên làm việc.');
+      alert(`✓ Gộp bảng thành công!\n- Tên bảng mới: ${r.data.name}\n- Thống kê: ${rowMsg}\n\nBảng mới đã được tự động thêm vào phiên làm việc.`);
       ST.tables=r.data.tables;
       ST.mgRes=null;
       ST.mgPreview=null;
