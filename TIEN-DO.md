@@ -213,7 +213,7 @@ Trạng thái: **10/10 Giai đoạn bắt buộc cốt lõi đã hoàn thành 10
   - Kiểm toán hiệu năng xử lý 10.000 dòng và 50.000 dòng.
 
 ## Kiểm thử hồi quy toàn diện (mục 63 đến 67)
-`python tests/run_all.py` chạy toàn bộ **23 bộ kiểm thử**:
+`python tests/run_all.py` chạy toàn bộ **24 bộ kiểm thử**:
 1. `test_units`: kiểm thử đơn vị
 2. `test_golden`: kiểm thử đáp án chuẩn 12 bộ dữ liệu
 3. `test_formula`: kiểm thử 4.000 công thức và đối chiếu 2 bộ tính
@@ -239,4 +239,22 @@ Trạng thái: **10/10 Giai đoạn bắt buộc cốt lõi đã hoàn thành 10
 23. `test_core`: kiểm thử cốt lõi bộ xử lý C++/Python
 24. `test_ui`: kiểm thử giao diện Playwright (tự động bỏ qua nếu chưa cài browser)
 
-Kết quả hiện tại: **Toàn bộ bộ kiểm thử ĐẠT 100% SẠCH LỖI**.
+Kết quả hiện tại: **Toàn bộ 24/24 bộ kiểm thử ĐẠT 100% SẠCH LỖI**.
+
+## Tối ưu hóa & Hoàn thiện tương tác giao diện người dùng (UI Interaction Polish)
+- **Làm sạch chuyên sâu (`card-cleaning`):**
+  - Khắc phục triệt để lỗi mất dữ liệu ô nhập (Find/Replace text) khi bấm "Xem trước" hoặc chuyển tab nhờ lưu trữ hai chiều (`input`/`change`) vào `ST.clean`.
+  - Khắc phục thanh trượt ngưỡng tương đồng (`clean-dup-thresh`): cập nhật nhãn phần trăm thời gian thực và đồng bộ vào tham số quét trùng lặp mờ.
+  - Bổ sung tùy chọn chi tiết theo ngữ cảnh cho Chuẩn hóa nhanh: Chữ hoa đầu từ/In hoa/In thường/Bỏ dấu tiếng Việt, định dạng số điện thoại chuẩn VN/nhóm 4-3-3/E.164, sửa typo email.
+- **Quy tắc kiểm định nghiệp vụ (`card-business-rules`):**
+  - Khắc phục lỗi ẩn cột so sánh thứ 2 khi chọn loại quy tắc `compare_columns`: tự động chuyển đổi hiển thị động giữa ô giá trị và dropdown cột mục tiêu.
+  - Ẩn các trường không cần thiết khi kiểm tra Email/SĐT/Không trống/Duy nhất để giao diện gọn gàng, tránh nhầm lẫn.
+- **Không gian công nghệ Node Graph & Con Mắt Cyber Eye (`#tech-space`):**
+  - Chống xung đột kéo thả: ngăn chặn thao tác rê chuột vào nút phóng to (`col-expand-btn`), ô tìm kiếm cột hoặc nút đóng Dock kích hoạt nhầm thao tác kéo node.
+  - Sửa chỉ số hàng tuyệt đối khi đánh dấu hồ sơ đối tượng từ Dossier (`(ST.grid.start||0) + rowIdx`), đảm bảo đánh dấu chính xác khi ở trang phân trang > 1.
+  - Tối ưu hóa quản lý sự kiện chuột: loại bỏ hiện tượng gắn trùng lặp các listener `mousemove`/`mouseup` trên `window` sau mỗi lần render.
+  - Bổ sung đóng modal linh hoạt: nhấp ra vùng tối (backdrop) hoặc nhấn phím `Escape` để đóng ngay Dossier Modal và Preset Modal.
+- **Tích hợp giao diện người dùng cho các tính năng Stage C mới:**
+  - Bổ sung Card Quản lý phiên bản dữ liệu (`card-versioning`): Tạo bản chụp snapshot kèm tên/mô tả, xem danh sách và khôi phục (Restore) tức thì.
+  - Bổ sung Card Phân tích thống kê & Báo cáo nhanh (`card-analysis`): Chạy phân tích tự động, hiển thị các thẻ KPI (Tổng, Trung bình, Min, Max), nhận diện kiểu cột.
+  - Bổ sung Card Truy vết nguồn gốc (`card-lineage`): Tra cứu nguồn gốc từng ô dữ liệu qua toàn bộ các bước biến đổi trong quy trình.

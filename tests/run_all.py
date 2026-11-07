@@ -1,6 +1,10 @@
 """Chạy toàn bộ bộ kiểm thử và in bảng tổng hợp (mục 67: hồi quy). Chạy từ thư mục dự án: python tests/run_all.py
 Thêm --fast để bỏ qua phần đo hiệu năng 50.000 dòng."""
 import os, sys, subprocess, time
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 here = os.path.dirname(os.path.abspath(__file__)); root = os.path.dirname(here)
 env = dict(os.environ); 
 env["PYTHONIOENCODING"] = "utf-8"

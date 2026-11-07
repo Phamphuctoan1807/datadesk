@@ -564,6 +564,7 @@ function setInfo(i,keep){
   ui();
   loadGrid(i.header?1:0);
   loadOps();
+  loadVersionsList();
   fetchQualityScore().then(()=>ui());
   if(currentMode==='tech'){
     $('#tech-space').style.display='block';
@@ -650,6 +651,9 @@ function ui(){
   h+=nzCard();
   h+=cleanCard();
   h+=businessRulesCard();
+  h+=analysisCard();
+  h+=versionCard();
+  h+=lineageCard();
   h+=fcCard();
   h+=rlCard();
   h+=sug();
@@ -786,8 +790,29 @@ async function run(auto){
 }
 
 const W=$('#work');
-W.addEventListener('input',e=>{const el=e.target,d=el.dataset;if(d.k){ST[d.k][+d.i][d.f]=el.value;ST.res=null}else if(el.id==='fc-t')ST.fc.target=el.value;else if(el.id==='fc-e')ST.fc.expr=el.value;else if(el.id==='fc-ai')ST.fc.ai=el.value;else if(el.id==='nz-name')ST.nz.name=el.value;else if(el.dataset.nzo!==undefined)ST.nz.opts[el.dataset.nzo]=el.value;else if(el.id==='rl-name')ST.rl.name=el.value;else if(d.rk)rlSet(el)});
-W.addEventListener('change',e=>{const el=e.target,d=el.dataset;
+W.addEventListener('input',e=>{
+  const el=e.target,d=el.dataset;
+  if(d.k){ST[d.k][+d.i][d.f]=el.value;ST.res=null}
+  else if(el.id==='fc-t')ST.fc.target=el.value;
+  else if(el.id==='fc-e')ST.fc.expr=el.value;
+  else if(el.id==='fc-ai')ST.fc.ai=el.value;
+  else if(el.id==='nz-name')ST.nz.name=el.value;
+  else if(el.dataset.nzo!==undefined)ST.nz.opts[el.dataset.nzo]=el.value;
+  else if(el.id==='rl-name')ST.rl.name=el.value;
+  else if(d.rk)rlSet(el);
+  else if(el.id==='clean-fr-find'){ cleanBlank(); ST.clean.find_val=el.value; }
+  else if(el.id==='clean-fr-replace'){ cleanBlank(); ST.clean.replace_val=el.value; }
+  else if(el.id==='clean-dup-thresh'){
+    cleanBlank();
+    ST.clean.dup_threshold = +el.value / 100;
+    const lbl = $('#lbl-dup-thresh');
+    if(lbl) lbl.textContent = el.value + '%';
+  }
+  else if(el.id==='br-new-val'){ bRulesBlank(); ST.bRuleNew.val=el.value; }
+  else if(el.id==='ver-new-label'){ ST.verLabel=el.value; }
+});
+W.addEventListener('change',e=>{
+  const el=e.target,d=el.dataset;
   if(d.k){const v=el.value;ST[d.k][+d.i][d.f]=d.f==='col'?+v:v;ST.res=null;if(d.f!=='value'&&d.f!=='color')ui()}
   else if(el.dataset.rk){rlSet(el);if(['type','operator','scope','column'].includes(el.dataset.rf))ui()}
   else if(el.id==='rl-logic')ST.rl.logic=el.value
@@ -815,25 +840,52 @@ W.addEventListener('change',e=>{const el=e.target,d=el.dataset;
   else if(el.id==='mg-key-a'){ST.keyA=el.value;ST.mgPreview=null}
 
   else if(el.dataset.clnCol){
+    cleanBlank();
     const c = el.dataset.clnCol;
     if(el.checked){ if(!ST.clean.cols.includes(c)) ST.clean.cols.push(c); }
     else { ST.clean.cols = ST.clean.cols.filter(x=>x!==c); }
   }
   else if(el.dataset.clnDupcol){
+    cleanBlank();
     const c = el.dataset.clnDupcol;
     if(el.checked){ if(!ST.clean.dup_cols.includes(c)) ST.clean.dup_cols.push(c); }
     else { ST.clean.dup_cols = ST.clean.dup_cols.filter(x=>x!==c); }
   }
   else if(el.dataset.clnFmtcol){
+    cleanBlank();
     const c = el.dataset.clnFmtcol;
     if(el.checked){ if(!ST.clean.fmt_cols.includes(c)) ST.clean.fmt_cols.push(c); }
     else { ST.clean.fmt_cols = ST.clean.fmt_cols.filter(x=>x!==c); }
   }
+  else if(el.name==='cln-match'){ cleanBlank(); ST.clean.match_type = el.value; }
+  else if(el.id==='clean-fr-regex'){ cleanBlank(); ST.clean.is_regex = el.checked; }
+  else if(el.id==='clean-fr-case'){ cleanBlank(); ST.clean.case_sensitive = el.checked; }
+  else if(el.id==='clean-fr-target'){ cleanBlank(); ST.clean.target_mode = el.value; }
   else if(el.id==='clean-dup-mode'){
-    ST.clean.dup_mode = el.value; ui();
+    cleanBlank(); ST.clean.dup_mode = el.value; ui();
   }
+  else if(el.id==='clean-dup-strategy'){ cleanBlank(); ST.clean.dup_strategy = el.value; }
+  else if(el.id==='clean-dup-target'){ cleanBlank(); ST.clean.dup_target_mode = el.value; }
+  else if(el.id==='clean-fmt-kind'){
+    cleanBlank(); ST.clean.fmt_kind = el.value; ui();
+  }
+  else if(el.dataset.fmtOpt){
+    cleanBlank();
+    if(!ST.clean.fmt_opts) ST.clean.fmt_opts = {};
+    ST.clean.fmt_opts[el.dataset.fmtOpt] = el.type==='checkbox' ? el.checked : el.value;
+  }
+  else if(el.id==='br-new-type'){
+    bRulesBlank();
+    ST.bRuleNew.type = el.value;
+    updateBRuleFields();
+  }
+  else if(el.id==='br-new-col'){ bRulesBlank(); ST.bRuleNew.col = el.value; }
+  else if(el.id==='br-new-op'){ bRulesBlank(); ST.bRuleNew.op = el.value; }
+  else if(el.id==='br-new-val'){ bRulesBlank(); ST.bRuleNew.val = el.value; }
+  else if(el.id==='br-new-target-col'){ bRulesBlank(); ST.bRuleNew.target_col = el.value; }
 
-  else if(el.id==='mg-key-b'){ST.keyB=el.value;ST.mgPreview=null}});
+  else if(el.id==='mg-key-b'){ST.keyB=el.value;ST.mgPreview=null}
+});
 
 W.addEventListener('click',e=>{const td=e.target.closest('td[data-r]');
   if(td){const k=td.dataset.r+':'+td.dataset.c;ST.marks.has(k)?ST.marks.delete(k):ST.marks.add(k);td.classList.toggle('mkd');ST.res=null;const mc=$('#mc b');if(mc)mc.textContent=ST.marks.size;const rs=$('#res');if(rs)rs.remove();return}
@@ -885,13 +937,22 @@ W.addEventListener('click',e=>{const td=e.target.closest('td[data-r]');
     });
   }
   else if(el.id==='btn-add-brule'){
-    const typ = $('#br-new-type').value;
-    const col = $('#br-new-col').value;
-    const op = $('#br-new-op').value;
-    const val = $('#br-new-val').value;
-    const tcol = $('#br-new-target-col').value;
+    bRulesBlank();
+    const typ = $('#br-new-type') ? $('#br-new-type').value : 'compare';
+    const col = $('#br-new-col') ? $('#br-new-col').value : '';
+    const op = $('#br-new-op') ? $('#br-new-op').value : '>=';
+    const val = $('#br-new-val') ? $('#br-new-val').value : '';
+    const tcol = $('#br-new-target-col') ? $('#br-new-target-col').value : '';
     if(!col){
       alert('Vui lòng chọn cột cần kiểm tra!');
+      return;
+    }
+    if(typ === 'compare_columns' && (!tcol || tcol === col)){
+      alert('Vui lòng chọn một cột khác để so sánh cùng!');
+      return;
+    }
+    if(typ === 'compare' && (val === '' || val === undefined)){
+      alert('Vui lòng nhập giá trị để so sánh!');
       return;
     }
     const nameMap = {
@@ -925,11 +986,17 @@ W.addEventListener('click',e=>{const td=e.target.closest('td[data-r]');
   else if(el.id==='clean-tab-fmt'){ ST.clean.tab = 'fmt'; ui(); }
   else if(el.id==='clean-fr-prev'){
     cleanBlank();
-    const find_val = $('#clean-fr-find').value;
-    const replace_val = $('#clean-fr-replace').value;
-    const match_type = document.querySelector('input[name="cln-match"]:checked').value;
-    const is_regex = $('#clean-fr-regex').checked;
-    const case_sensitive = $('#clean-fr-case').checked;
+    const find_val = $('#clean-fr-find') ? $('#clean-fr-find').value : '';
+    const replace_val = $('#clean-fr-replace') ? $('#clean-fr-replace').value : '';
+    const matchRadio = document.querySelector('input[name="cln-match"]:checked');
+    const match_type = matchRadio ? matchRadio.value : 'contains';
+    const is_regex = $('#clean-fr-regex') ? $('#clean-fr-regex').checked : false;
+    const case_sensitive = $('#clean-fr-case') ? $('#clean-fr-case').checked : false;
+    ST.clean.find_val = find_val;
+    ST.clean.replace_val = replace_val;
+    ST.clean.match_type = match_type;
+    ST.clean.is_regex = is_regex;
+    ST.clean.case_sensitive = case_sensitive;
     fapi('/api/clean/find_replace/preview', {
       id: ST.id, table: ST.t, columns: ST.clean.cols,
       find_val, replace_val, match_type, is_regex, case_sensitive
@@ -940,12 +1007,19 @@ W.addEventListener('click',e=>{const td=e.target.closest('td[data-r]');
   }
   else if(el.id==='clean-fr-apply'){
     cleanBlank();
-    const find_val = $('#clean-fr-find').value;
-    const replace_val = $('#clean-fr-replace').value;
-    const match_type = document.querySelector('input[name="cln-match"]:checked').value;
-    const is_regex = $('#clean-fr-regex').checked;
-    const case_sensitive = $('#clean-fr-case').checked;
-    const target_mode = $('#clean-fr-target').value;
+    const find_val = $('#clean-fr-find') ? $('#clean-fr-find').value : '';
+    const replace_val = $('#clean-fr-replace') ? $('#clean-fr-replace').value : '';
+    const matchRadio = document.querySelector('input[name="cln-match"]:checked');
+    const match_type = matchRadio ? matchRadio.value : 'contains';
+    const is_regex = $('#clean-fr-regex') ? $('#clean-fr-regex').checked : false;
+    const case_sensitive = $('#clean-fr-case') ? $('#clean-fr-case').checked : false;
+    const target_mode = $('#clean-fr-target') ? $('#clean-fr-target').value : 'new_table';
+    ST.clean.find_val = find_val;
+    ST.clean.replace_val = replace_val;
+    ST.clean.match_type = match_type;
+    ST.clean.is_regex = is_regex;
+    ST.clean.case_sensitive = case_sensitive;
+    ST.clean.target_mode = target_mode;
     fapi('/api/clean/find_replace/apply', {
       id: ST.id, table: ST.t, columns: ST.clean.cols,
       find_val, replace_val, match_type, is_regex, case_sensitive, target_mode
@@ -963,9 +1037,11 @@ W.addEventListener('click',e=>{const td=e.target.closest('td[data-r]');
   }
   else if(el.id==='clean-dup-detect'){
     cleanBlank();
-    const mode = $('#clean-dup-mode').value;
+    const mode = $('#clean-dup-mode') ? $('#clean-dup-mode').value : 'exact';
     const threshInput = $('#clean-dup-thresh');
     const threshold = threshInput ? (+threshInput.value / 100) : 0.85;
+    ST.clean.dup_mode = mode;
+    ST.clean.dup_threshold = threshold;
     fapi('/api/clean/duplicates/detect', {
       id: ST.id, table: ST.t, columns: ST.clean.dup_cols, mode, threshold
     }).then(r => {
@@ -975,11 +1051,15 @@ W.addEventListener('click',e=>{const td=e.target.closest('td[data-r]');
   }
   else if(el.id==='clean-dup-apply'){
     cleanBlank();
-    const mode = $('#clean-dup-mode').value;
+    const mode = $('#clean-dup-mode') ? $('#clean-dup-mode').value : 'exact';
     const threshInput = $('#clean-dup-thresh');
     const threshold = threshInput ? (+threshInput.value / 100) : 0.85;
-    const strategy = $('#clean-dup-strategy').value;
-    const target_mode = $('#clean-dup-target').value;
+    const strategy = $('#clean-dup-strategy') ? $('#clean-dup-strategy').value : 'keep_first';
+    const target_mode = $('#clean-dup-target') ? $('#clean-dup-target').value : 'new_table';
+    ST.clean.dup_mode = mode;
+    ST.clean.dup_threshold = threshold;
+    ST.clean.dup_strategy = strategy;
+    ST.clean.dup_target_mode = target_mode;
     fapi('/api/clean/duplicates/remove', {
       id: ST.id, table: ST.t, columns: ST.clean.dup_cols, mode, strategy, threshold, target_mode
     }).then(async r => {
@@ -996,7 +1076,11 @@ W.addEventListener('click',e=>{const td=e.target.closest('td[data-r]');
   }
   else if(el.id==='clean-fmt-apply'){
     cleanBlank();
-    const kind = $('#clean-fmt-kind').value;
+    if(!ST.clean.fmt_cols || !ST.clean.fmt_cols.length){
+      alert('Vui lòng chọn ít nhất 1 cột cần chuẩn hóa!');
+      return;
+    }
+    const kind = $('#clean-fmt-kind') ? $('#clean-fmt-kind').value : 'text';
     fapi('/api/clean/format/apply', {
       id: ST.id, table: ST.t, columns: ST.clean.fmt_cols, kind,
       options: ST.clean.fmt_opts, target_mode: 'in_place'
@@ -1005,6 +1089,57 @@ W.addEventListener('click',e=>{const td=e.target.closest('td[data-r]');
         ST.clean.fmt_res = r.data;
         await afterChange();
       } else alert('Lỗi: ' + (r.errors[0]?r.errors[0].message:''));
+    });
+  }
+
+  else if(el.id==='btn-ver-create'){
+    const inp = $('#ver-new-label');
+    const label = (inp ? inp.value.trim() : '') || ('Phiên bản ' + ((ST.versions||[]).length + 1));
+    fapi('/api/version/create', { id: ST.id, table: ST.t, label: label }).then(r => {
+      if(r.success){
+        alert('✓ Đã tạo bản chụp "' + label + '" thành công!');
+        loadVersionsList().then(()=>ui());
+      } else {
+        alert('Lỗi tạo bản chụp: ' + (r.errors[0]?r.errors[0].message:''));
+      }
+    });
+  }
+  else if(el.id==='btn-ver-refresh'){
+    loadVersionsList().then(()=>ui());
+  }
+  else if(el.dataset.verRestore){
+    const vid = el.dataset.verRestore;
+    if(confirm('Bạn có chắc muốn khôi phục về phiên bản này? Dữ liệu hiện tại sẽ được thay thế.')){
+      fapi('/api/version/restore', { id: ST.id, version_id: vid }).then(async r => {
+        if(r.success){
+          alert('✓ Đã khôi phục dữ liệu thành công!');
+          await afterChange();
+        } else {
+          alert('Lỗi khôi phục: ' + (r.errors[0]?r.errors[0].message:''));
+        }
+      });
+    }
+  }
+  else if(el.id==='btn-analysis-run'){
+    api(`/api/analysis/dashboard?id=${ST.id}&table=${ST.t}`).then(r => {
+      if(r.success){
+        ST.analysis = r.data.analysis;
+        ui();
+      } else {
+        alert('Lỗi phân tích: ' + (r.errors[0]?r.errors[0].message:''));
+      }
+    });
+  }
+  else if(el.id==='btn-lineage-inspect'){
+    const col = $('#lineage-col') ? $('#lineage-col').value : '';
+    const rowVal = Math.max(0, +($('#lineage-row') ? $('#lineage-row').value : 1) - 1);
+    api(`/api/lineage/cell?id=${ST.id}&table=${ST.t}&row=${rowVal}&col=${encodeURIComponent(col)}`).then(r => {
+      if(r.success){
+        ST.lineageResult = r.data;
+        ui();
+      } else {
+        alert('Lỗi truy vết: ' + (r.errors[0]?r.errors[0].message:''));
+      }
     });
   }
 
@@ -1365,6 +1500,129 @@ function cleanCard(){
   return h;
 }
 
+/* === STAGE C: FUTURE 6, 8, 5, 7 - VERSIONING, ANALYSIS & LINEAGE === */
+async function loadVersionsList(){
+  try{
+    if(!ST||!ST.id)return;
+    const r = await api(`/api/version/list?id=${ST.id}&table=${ST.t}`);
+    ST.versions = (r && r.data && r.data.versions) || [];
+  }catch(e){
+    ST.versions = [];
+  }
+}
+
+function versionCard(){
+  const V = ST.versions || [];
+  let h = `<section class="card" id="card-versioning">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+      <div>
+        <h2 style="margin:0 0 4px">Quản lý phiên bản dữ liệu (Stage C - Future 6)</h2>
+        <p class="sub" style="margin:0">Lưu lại các mốc thời gian (Snapshot) để khôi phục hoặc so sánh bất cứ lúc nào.</p>
+      </div>
+      <div class="rw" style="margin:0;gap:6px">
+        <button class="add" id="btn-ver-refresh">🔄 Làm mới danh sách</button>
+      </div>
+    </div>
+    <div class="rw" style="margin-top:12px;gap:8px">
+      <input id="ver-new-label" placeholder="Tên phiên bản (Ví dụ: Trước khi lọc trùng)" value="${esc(ST.verLabel||'')}" style="flex:1;padding:7px 12px;border-radius:6px;border:1px solid rgba(255,255,255,0.15);background:rgba(0,0,0,0.2);color:#fff">
+      <button class="go" id="btn-ver-create" style="padding:7px 16px;font-size:13px">💾 Tạo bản chụp (Snapshot)</button>
+    </div>`;
+
+  if(V.length){
+    h += `<div class="tw" style="margin-top:12px;max-height:220px"><table>
+      <tr><th>Mã PB</th><th>Tên phiên bản</th><th>Số dòng / cột</th><th>Thời gian</th><th>Thao tác</th></tr>
+      ${V.map(v=>`<tr>
+        <td><code>${esc((v.version_id||'').slice(0,8))}</code></td>
+        <td><b>${esc(v.label||'Phiên bản')}</b>${v.description?`<br><small style="color:#94a3b8">${esc(v.description)}</small>`:''}</td>
+        <td>${v.row_count} dòng, ${v.col_count} cột</td>
+        <td><small>${esc(v.created_at||'')}</small></td>
+        <td><button class="add" data-ver-restore="${esc(v.version_id)}" style="padding:3px 10px;font-size:11.5px">↩ Khôi phục</button></td>
+      </tr>`).join('')}
+    </table></div>`;
+  } else {
+    h += `<p class="hint" style="margin-top:10px">Chưa có bản chụp nào. Bấm "Tạo bản chụp" để lưu trạng thái hiện tại của dữ liệu.</p>`;
+  }
+  h += `</section>`;
+  return h;
+}
+
+function analysisCard(){
+  const A = ST.analysis;
+  let h = `<section class="card" id="card-analysis">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+      <div>
+        <h2 style="margin:0 0 4px">Phân tích thống kê & Báo cáo nhanh (Stage C - Future 8)</h2>
+        <p class="sub" style="margin:0">Tự động phân tích thống kê (Tổng, Trung bình, Min, Max), nhận diện kiểu dữ liệu và trực quan hóa KPI.</p>
+      </div>
+      <div>
+        <button class="add" id="btn-analysis-run" style="padding:7px 16px;font-size:13px;background:var(--acc);color:#070e17;font-weight:700">📊 Chạy phân tích ngay</button>
+      </div>
+    </div>`;
+
+  if(A && A.kpi_cards && A.kpi_cards.length){
+    h += `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;margin-top:14px">
+      ${A.kpi_cards.map(k=>`<div style="padding:12px 14px;border-radius:10px;background:rgba(15,27,45,0.85);border:1px solid rgba(0,240,255,0.25)">
+        <div style="font-size:12px;color:#94a3b8">${esc(k.title)}</div>
+        <div style="font-size:20px;font-weight:800;color:var(--acc);margin:4px 0">${esc(k.value)}</div>
+        <div style="font-size:11.5px;color:#64748b">${esc(k.subtitle)}</div>
+      </div>`).join('')}
+    </div>`;
+
+    if(A.column_detection){
+      const cd = A.column_detection;
+      h += `<div class="rw" style="margin-top:12px;gap:16px;font-size:12.5px;color:#94a3b8">
+        <span>Cột số: <b style="color:#38bdf8">${(cd.numeric||[]).map(esc).join(', ')||'Không có'}</b></span>
+        <span>Cột phân loại: <b style="color:#a78bfa">${(cd.categorical||[]).map(esc).join(', ')||'Không có'}</b></span>
+        <span>Cột ngày: <b style="color:#f472b6">${(cd.date||[]).map(esc).join(', ')||'Không có'}</b></span>
+      </div>`;
+    }
+  } else if(!A){
+    h += `<p class="hint" style="margin-top:10px">Bấm "Chạy phân tích ngay" để hệ thống tự động tính toán KPI và phân tích bảng dữ liệu hiện tại.</p>`;
+  }
+  h += `</section>`;
+  return h;
+}
+
+function lineageCard(){
+  const L = ST.lineageResult;
+  const cols = (ST.info && ST.info.columns) || [];
+  let h = `<section class="card" id="card-lineage">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+      <div>
+        <h2 style="margin:0 0 4px">Truy vết nguồn gốc dữ liệu (Data Lineage - Future 5 & 7)</h2>
+        <p class="sub" style="margin:0">Tra cứu nguồn gốc của bất kỳ ô dữ liệu nào: từ ô file gốc qua từng bước công thức, quy tắc hay chuẩn hóa.</p>
+      </div>
+    </div>
+    <div class="rw" style="margin-top:12px;gap:8px">
+      <label class="f" style="flex:1">Chọn cột cần truy vết:
+        <select id="lineage-col">
+          ${cols.map(c=>`<option value="${esc(c.name)}">${esc(c.name)}</option>`).join('')}
+        </select>
+      </label>
+      <label class="f" style="width:120px">Dòng số (#):
+        <input type="number" id="lineage-row" value="1" min="1" max="${(ST.info&&ST.info.n_rows)||1000}">
+      </label>
+      <button class="add" id="btn-lineage-inspect" style="margin-top:18px;padding:7px 16px">🔍 Truy vết ô</button>
+    </div>`;
+
+  if(L){
+    h += `<div style="margin-top:12px;padding:12px 16px;border-radius:10px;background:rgba(15,27,45,0.85);border:1px solid rgba(0,240,255,0.25)">
+      <div style="font-weight:700;font-size:14px;color:#00f0ff">Kết quả truy vết: Cột [${esc(L.column)}] - Dòng #${L.row_index + 1}</div>
+      <div style="margin-top:6px;font-size:13px">Giá trị hiện tại: <b style="color:#22c55e">${esc(String(L.current_value))}</b> (Kiểu: ${esc(L.column_type)})</div>
+      ${L.trace && L.trace.steps && L.trace.steps.length ? `
+        <div style="margin-top:8px">
+          <small style="color:#94a3b8">Lịch sử biến đổi (${L.trace.steps.length} bước):</small>
+          <ul style="margin:4px 0 0;padding-left:18px;font-size:12.5px">
+            ${L.trace.steps.map(s=>`<li><b>Bước ${s.step_index}: ${esc(s.operation)}</b> - ${esc(s.description || '')}</li>`).join('')}
+          </ul>
+        </div>
+      ` : '<p class="hint" style="margin:6px 0 0">Ô dữ liệu được giữ nguyên từ file gốc ban đầu.</p>'}
+    </div>`;
+  }
+  h += `</section>`;
+  return h;
+}
+
 /* === PRESET MODAL & PRESET LOGIC === */
 let PRESETS_LIST = [];
 let SHOW_PRESET_MODAL = false;
@@ -1390,7 +1648,7 @@ function renderPresetModal(){
     return;
   }
 
-  let h = `<div style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.75);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(6px)">
+  let h = `<div id="preset-modal-overlay" style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.75);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(6px)">
     <div style="background:#0f172a;border:1px solid rgba(0,240,255,0.4);border-radius:12px;max-width:760px;width:100%;max-height:85vh;overflow-y:auto;padding:24px;box-shadow:0 20px 50px rgba(0,0,0,0.8);color:#e2e8f0">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:12px">
         <h3 style="margin:0;color:#00f0ff;font-size:18px">📂 Quản lý mẫu quy trình (Saved Presets)</h3>
@@ -1431,6 +1689,11 @@ function renderPresetModal(){
   // Modal event listeners
   const closeBtn = document.getElementById('preset-modal-close');
   if(closeBtn) closeBtn.onclick = () => { SHOW_PRESET_MODAL = false; renderPresetModal(); };
+
+  const overlay = document.getElementById('preset-modal-overlay');
+  if(overlay) overlay.onclick = (e) => {
+    if(e.target === overlay){ SHOW_PRESET_MODAL = false; renderPresetModal(); }
+  };
 
   const importFile = document.getElementById('preset-import-file');
   if(importFile) importFile.onchange = async (e) => {
@@ -1510,7 +1773,38 @@ function bRulesBlank(){
       {id: "br_2", name: "Email hợp lệ", type: "valid_email", column: ""},
     ];
     ST.bRulesResult = null;
-    ST.bRulesNew = {type: "compare", column: "", operator: ">=", value: "0", target_column: "", name: ""};
+  }
+  if(!ST.bRuleNew){
+    const col0 = (ST.info && ST.info.columns && ST.info.columns[0]) ? ST.info.columns[0].name : '';
+    const col1 = (ST.info && ST.info.columns && ST.info.columns[1]) ? ST.info.columns[1].name : col0;
+    ST.bRuleNew = {
+      type: "compare",
+      col: col0,
+      op: ">=",
+      val: "0",
+      target_col: col1
+    };
+  }
+}
+
+function updateBRuleFields(){
+  const typ = $('#br-new-type') ? $('#br-new-type').value : (ST.bRuleNew ? ST.bRuleNew.type : 'compare');
+  const opEl = $('#br-new-op');
+  const valEl = $('#br-new-val');
+  const tcolEl = $('#br-new-target-col');
+  if(!opEl || !valEl || !tcolEl) return;
+  if(typ === 'compare'){
+    opEl.style.display = 'inline-block';
+    valEl.style.display = 'inline-block';
+    tcolEl.style.display = 'none';
+  } else if(typ === 'compare_columns'){
+    opEl.style.display = 'inline-block';
+    valEl.style.display = 'none';
+    tcolEl.style.display = 'inline-block';
+  } else {
+    opEl.style.display = 'none';
+    valEl.style.display = 'none';
+    tcolEl.style.display = 'none';
   }
 }
 
@@ -1520,6 +1814,7 @@ function businessRulesCard(){
   const cols = (I && I.columns) || [];
   const R = ST.bRules || [];
   const RES = ST.bRulesResult;
+  const BN = ST.bRuleNew;
 
   let h = `<section class="card" id="card-business-rules">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
@@ -1581,29 +1876,29 @@ function businessRulesCard(){
     <b style="font-size:13px;color:var(--acc)">+ Thêm quy tắc mới:</b>
     <div class="rw" style="margin-top:8px">
       <select id="br-new-type">
-        <option value="compare">So sánh số với giá trị ([Cột] >= Giá trị)</option>
-        <option value="compare_columns">So sánh giữa 2 cột ([Cột A] >= [Cột B])</option>
-        <option value="valid_email">Email đúng định dạng</option>
-        <option value="valid_phone">Số điện thoại Việt Nam hợp lệ</option>
-        <option value="not_empty">Không được để trống</option>
-        <option value="unique">Giá trị không được trùng lặp</option>
+        <option value="compare"${BN.type==='compare'?' selected':''}>So sánh số với giá trị ([Cột] >= Giá trị)</option>
+        <option value="compare_columns"${BN.type==='compare_columns'?' selected':''}>So sánh giữa 2 cột ([Cột A] >= [Cột B])</option>
+        <option value="valid_email"${BN.type==='valid_email'?' selected':''}>Email đúng định dạng</option>
+        <option value="valid_phone"${BN.type==='valid_phone'?' selected':''}>Số điện thoại Việt Nam hợp lệ</option>
+        <option value="not_empty"${BN.type==='not_empty'?' selected':''}>Không được để trống</option>
+        <option value="unique"${BN.type==='unique'?' selected':''}>Giá trị không được trùng lặp</option>
       </select>
       <select id="br-new-col">
         <option value="">-- Chọn cột kiểm tra --</option>
-        ${cols.map(c=>`<option value="${esc(c.name)}">${esc(c.name)}</option>`).join('')}
+        ${cols.map(c=>`<option value="${esc(c.name)}"${c.name===BN.col?' selected':''}>${esc(c.name)}</option>`).join('')}
       </select>
-      <select id="br-new-op">
-        <option value=">=">>= (Lớn hơn hoặc bằng)</option>
-        <option value="<="><= (Nhỏ hơn hoặc bằng)</option>
-        <option value=">">> (Lớn hơn)</option>
-        <option value="<">< (Nhỏ hơn)</option>
-        <option value="==">== (Bằng chính xác)</option>
-        <option value="!=">!= (Khác)</option>
+      <select id="br-new-op" style="display:${(BN.type==='compare'||BN.type==='compare_columns')?'inline-block':'none'}">
+        <option value=">="${BN.op==='>='?' selected':''}>>= (Lớn hơn hoặc bằng)</option>
+        <option value="<="${BN.op==='<='?' selected':''}><= (Nhỏ hơn hoặc bằng)</option>
+        <option value=">"${BN.op==='>'?' selected':''}>> (Lớn hơn)</option>
+        <option value="<"${BN.op==='<'?' selected':''}>< (Nhỏ hơn)</option>
+        <option value="=="${BN.op==='=='?' selected':''}>== (Bằng chính xác)</option>
+        <option value="!="${BN.op==='!='?' selected':''}>!= (Khác)</option>
       </select>
-      <input id="br-new-val" placeholder="Giá trị so sánh (e.g. 0, 18)" style="width:130px">
-      <select id="br-new-target-col" style="display:none">
+      <input id="br-new-val" placeholder="Giá trị so sánh (e.g. 0, 18)" style="width:130px;display:${BN.type==='compare'?'inline-block':'none'}" value="${esc(BN.val||'')}">
+      <select id="br-new-target-col" style="display:${BN.type==='compare_columns'?'inline-block':'none'}">
         <option value="">-- Cột so sánh cùng --</option>
-        ${cols.map(c=>`<option value="${esc(c.name)}">${esc(c.name)}</option>`).join('')}
+        ${cols.map(c=>`<option value="${esc(c.name)}"${c.name===BN.target_col?' selected':''}>${esc(c.name)}</option>`).join('')}
       </select>
       <button class="add" id="btn-add-brule">+ Thêm</button>
     </div>
@@ -2249,13 +2544,17 @@ function openDossier(rowIdx){
   h+=`</div>`;
   $('#dossier-body').innerHTML=h;
   
+  const absRow = (ST.grid && ST.grid.start ? ST.grid.start : 0) + rowIdx;
   $('#dossier-mark-btn').onclick=()=>{
     ST.info.columns.forEach((_,cIdx)=>{
-      ST.marks.add(`${rowIdx}:${cIdx}`);
+      ST.marks.add(`${absRow}:${cIdx}`);
     });
     alert(`Đã đánh dấu (tô đỏ) toàn bộ các ô thuộc dòng #${rowNum}`);
     modal.style.display='none';
     ui();
+  };
+  modal.onclick = e => {
+    if(e.target === modal) modal.style.display = 'none';
   };
   $('#dossier-filter-btn').onclick=()=>{
     ST.flts.push({col:0,op:'contains',value:String(rowData[0]||'')});
@@ -2279,6 +2578,7 @@ function bindTechEvents(){
   if(!vp)return;
   
   vp.onmousedown=e=>{
+    if(e.target.closest('.col-expand-btn') || e.target.closest('.eye-dock-close') || e.target.closest('.eye-col-input')) return;
     const header=e.target.closest('.col-node-header');
     if(header){
       const colIdx=+header.dataset.dragCol;
@@ -2296,30 +2596,42 @@ function bindTechEvents(){
     }
   };
   
-  window.addEventListener('mousemove',e=>{
-    if(dragNode){
-      const dx=e.clientX-dragStartMouse.x;
-      const dy=e.clientY-dragStartMouse.y;
-      dragNode.x=dragStartPos.x+dx;
-      dragNode.y=dragStartPos.y+dy;
-      dragNode.el.style.left=dragNode.x+'px';
-      dragNode.el.style.top=dragNode.y+'px';
-      updateCable(dragNode);
-      if(globalSearchKeyword)drawCrossCables();
-    }else if(isPanning){
-      techPan.x=e.clientX-panStart.x;
-      techPan.y=e.clientY-panStart.y;
-      applyCanvasPan();
-    }
-  });
-  
-  window.addEventListener('mouseup',()=>{
-    dragNode=null;
-    if(isPanning){
-      isPanning=false;
-      vp.classList.remove('panning');
-    }
-  });
+  if(!window._techMouseBound){
+    window._techMouseBound = true;
+    window.addEventListener('mousemove',e=>{
+      if(dragNode){
+        const dx=e.clientX-dragStartMouse.x;
+        const dy=e.clientY-dragStartMouse.y;
+        dragNode.x=dragStartPos.x+dx;
+        dragNode.y=dragStartPos.y+dy;
+        dragNode.el.style.left=dragNode.x+'px';
+        dragNode.el.style.top=dragNode.y+'px';
+        updateCable(dragNode);
+        if(globalSearchKeyword)drawCrossCables();
+      }else if(isPanning){
+        techPan.x=e.clientX-panStart.x;
+        techPan.y=e.clientY-panStart.y;
+        applyCanvasPan();
+      }
+    });
+    
+    window.addEventListener('mouseup',()=>{
+      dragNode=null;
+      if(isPanning){
+        isPanning=false;
+        const v=$('#tech-viewport');
+        if(v)v.classList.remove('panning');
+      }
+    });
+
+    window.addEventListener('keydown', e => {
+      if(e.key === 'Escape'){
+        const dm = $('#dossier-modal');
+        if(dm && dm.style.display !== 'none') dm.style.display = 'none';
+        if(SHOW_PRESET_MODAL){ SHOW_PRESET_MODAL = false; renderPresetModal(); }
+      }
+    });
+  }
   
   $('#central-node').onclick=()=>toggleAllColumns();
   $('#btn-toggle-all-cols').onclick=()=>toggleAllColumns();
