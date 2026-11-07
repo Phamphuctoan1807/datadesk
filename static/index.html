@@ -755,17 +755,20 @@ W.addEventListener('change',e=>{const el=e.target,d=el.dataset;
   else if(el.id==='fmt'){ST.fmt=el.value;ST.res=null;ui()}
   else if(el.id==='formula_mode'){ST.formulaMode=el.value;ST.res=null}
   else if(el.id==='mg-file'){if(el.files&&el.files[0])mgAddFile(el.files[0]);el.value=''}
-  else if(el.id==='mg-ta'){ST.mgTa=+el.value;ST.mgRes=null;ui()}
-  else if(el.id==='mg-tb'){ST.mgTb=+el.value;ST.mgRes=null;ui()}
-  else if(el.id==='mg-mode'){ST.mgMode=el.value;ui()}
-  else if(el.id==='mg-key-a'){ST.keyA=el.value}
-  else if(el.id==='mg-key-b'){ST.keyB=el.value}});
+  else if(el.id==='mg-ta'){ST.mgTa=+el.value;ST.mgRes=null;ST.mgPreview=null;ui()}
+  else if(el.id==='mg-tb'){ST.mgTb=+el.value;ST.mgRes=null;ST.mgPreview=null;ui()}
+  else if(el.id==='mg-mode'){ST.mgMode=el.value;ST.mgPreview=null;ui()}
+  else if(el.id==='mg-join-type'){ST.mgJoinType=el.value;ST.mgPreview=null}
+  else if(el.id==='mg-conflict'){ST.mgConflict=el.value;ST.mgPreview=null}
+  else if(el.id==='mg-key-a'){ST.keyA=el.value;ST.mgPreview=null}
+  else if(el.id==='mg-key-b'){ST.keyB=el.value;ST.mgPreview=null}});
 
 W.addEventListener('click',e=>{const td=e.target.closest('td[data-r]');
   if(td){const k=td.dataset.r+':'+td.dataset.c;ST.marks.has(k)?ST.marks.delete(k):ST.marks.add(k);td.classList.toggle('mkd');ST.res=null;const mc=$('#mc b');if(mc)mc.textContent=ST.marks.size;const rs=$('#res');if(rs)rs.remove();return}
   const el=e.target.closest('button');if(!el)return;
   if(el.id==='go'||el.id==='go2')run(el.id==='go2');
   else if(el.id==='mg-analyze')mgAnalyze();
+  else if(el.id==='mg-preview')mgPreview();
   else if(el.id==='mg-exec')mgExecute();
   else if(el.dataset.ins!==undefined)fcIns(el.dataset.ins);
   else if(el.id==='pp-report')ppReport();
@@ -958,86 +961,172 @@ function nzCard(){
   <div class="rw" style="margin-top:12px"><button class="add" id="nz-prev">Xem trước</button><button class="go" id="nz-apply" style="padding:8px 18px">${N.op_id?'Lưu thay đổi':'Thêm vào quy trình'}</button>${N.op_id?'<button class="add" id="nz-cancel">Hủy sửa</button>':''}</div>${nzRes()}</section>`;
   return h}
 
-/* === GỘP FILE & SO KHỚP CỘT THÔNG MINH (CHẾ ĐỘ GHÉP / GỘP ĐẦY ĐỦ) === */
+/* === GỘP BẢNG & SO KHỚP CỘT THÔNG MINH (SMART MERGE - GIAI ĐOẠN 6 & 7) === */
 function mergeCard(){
-  let h=`<section class="card" id="card-merge"><h2>Gộp file & So khớp cột thông minh (Giai đoạn 5)</h2>
-  <p class="sub">Tải thêm file dữ liệu vào phiên làm việc để phân tích cấu trúc, nhận diện khóa chính/khóa kép, so khớp cột tự động và thực hiện gộp dòng hoặc ghép theo khóa.</p>
-  <div class="rw" style="align-items:center;gap:10px">
-    <label class="add" style="cursor:pointer;padding:8px 16px;font-weight:600;display:inline-flex;align-items:center;gap:6px">+ Tải thêm file vào phiên
-      <input type="file" id="mg-file" style="display:none" accept=".xlsx,.xlsm,.csv,.tsv,.txt,.json,.docx,.pdf">
-    </label>
-    <span class="hint" style="margin:0">${ST.tables.length>1?`Đang có <b>${ST.tables.length}</b> bảng dữ liệu trong phiên.`:'Hiện mới có 1 bảng. Hãy tải thêm file hoặc sheet thứ 2 để so khớp & ghép.'}</span>
-  </div>`;
-  if(ST.tables.length>1){
-    const ta=ST.mgTa!==undefined?ST.mgTa:0, tb=ST.mgTb!==undefined?ST.mgTb:1;
-    const mode=ST.mgMode||'UNION';
-    h+=`<div class="rw" style="margin-top:14px;gap:12px;align-items:center">
-      <div><b>Bảng A (Gốc):</b> <select id="mg-ta">${ST.tables.map((t,i)=>`<option value="${i}"${i===ta?' selected':''}>${esc(t.name)}</option>`).join('')}</select></div>
-      <div><b>Bảng B (Ghép vào):</b> <select id="mg-tb">${ST.tables.map((t,i)=>`<option value="${i}"${i===tb?' selected':''}>${esc(t.name)}</option>`).join('')}</select></div>
-      <div><b>Chế độ ghép:</b> <select id="mg-mode">
-        <option value="UNION"${mode==='UNION'?' selected':''}>📑 Gộp dòng (Append / Union)</option>
-        <option value="JOIN"${mode==='JOIN'?' selected':''}>🔗 Ghép theo khóa (Join / Match)</option>
-      </select></div>
-      <button class="add" id="mg-analyze" style="margin:0">🔍 Phân tích & So khớp cột</button>
+  let h=`<section class="card" id="card-merge">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+      <div>
+        <h2 style="margin:0 0 4px">Gộp bảng & So khớp thông minh (Smart Merge)</h2>
+        <p class="sub" style="margin:0">Tự động nhận diện lược đồ, khóa chính/kép, so khớp cột đa tiêu chí và thực thi Gộp dòng (UNION) hoặc Ghép theo khóa (JOIN).</p>
+      </div>
+      <div>
+        <label class="add" style="cursor:pointer;padding:8px 16px;font-weight:600;display:inline-flex;align-items:center;gap:6px">
+          + Tải thêm file vào phiên
+          <input type="file" id="mg-file" style="display:none" accept=".xlsx,.xlsm,.csv,.tsv,.txt,.json,.docx,.pdf">
+        </label>
+      </div>
     </div>`;
 
-    if(ST.mgRes){
-      const M=ST.mgRes, rec=M.recommendation||{};
-      const recVn={UNION:'Gộp dòng (Append / Union)',JOIN:'Ghép theo khóa (Join / Match)',REVIEW_REQUIRED:'Cần xem xét'};
-      const colsA=M.schema_a.columns||[], colsB=M.schema_b.columns||[];
-      const keyCandidatesA=M.schema_a.key_candidates||[];
-      const keyCandidatesB=M.schema_b.key_candidates||[];
+  if(ST.tables.length <= 1){
+    h+=`<div style="margin-top:14px;padding:12px 16px;border-radius:8px;background:rgba(36,87,245,0.06);border:1px dashed var(--line)">
+      <span class="hint" style="margin:0">💡 Hiện phiên làm việc mới có <b>1 bảng</b>. Hãy bấm <b>"+ Tải thêm file vào phiên"</b> để nạp bảng thứ hai và kích hoạt bộ máy Smart Merge.</span>
+    </div></section>`;
+    return h;
+  }
 
-      h+=`<div style="margin-top:14px;padding:14px;border-radius:10px;background:rgba(0,240,255,0.04);border:1px solid var(--line)">
-        <p style="margin:0 0 8px"><b>Đề xuất hệ thống:</b> <span class="badge" style="background:#e0f2fe;color:#0369a1;padding:3px 10px;font-weight:700">${recVn[rec.mode]||rec.mode}</span> — ${esc(rec.reason||'')}</p>
-        
-        <div style="display:flex;gap:20px;flex-wrap:wrap;margin-top:10px">
-          <div style="flex:1;min-width:240px">
-            <b>Khóa ứng viên Bảng A:</b>
-            ${keyCandidatesA.length?`<ul style="margin:4px 0;padding-left:18px">${keyCandidatesA.slice(0,3).map(k=>`<li><b>${esc(k.column_name)}</b> (${(k.score*100).toFixed(0)}%${k.is_perfect_key?', 100% duy nhất':''})</li>`).join('')}</ul>`:'<p class="hint" style="margin:4px 0">Không tìm thấy khóa đơn đạt chuẩn.</p>'}
-            ${M.schema_a.composite_key_candidates.length?`<p style="margin:4px 0;font-size:12px;color:var(--mute)">Khóa kép đề xuất: ${M.schema_a.composite_key_candidates.map(k=>esc(k.column_names.join(' + '))).join('; ')}</p>`:''}
-          </div>
-          <div style="flex:1;min-width:240px">
-            <b>Khóa ứng viên Bảng B:</b>
-            ${keyCandidatesB.length?`<ul style="margin:4px 0;padding-left:18px">${keyCandidatesB.slice(0,3).map(k=>`<li><b>${esc(k.column_name)}</b> (${(k.score*100).toFixed(0)}%${k.is_perfect_key?', 100% duy nhất':''})</li>`).join('')}</ul>`:'<p class="hint" style="margin:4px 0">Không tìm thấy khóa đơn đạt chuẩn.</p>'}
-            ${M.schema_b.composite_key_candidates.length?`<p style="margin:4px 0;font-size:12px;color:var(--mute)">Khóa kép đề xuất: ${M.schema_b.composite_key_candidates.map(k=>esc(k.column_names.join(' + '))).join('; ')}</p>`:''}
-          </div>
+  const ta=ST.mgTa!==undefined?ST.mgTa:0, tb=ST.mgTb!==undefined?ST.mgTb:1;
+  const mode=ST.mgMode||'UNION';
+  const joinType=ST.mgJoinType||'left';
+  const conflictStrat=ST.mgConflict||'prefer_a';
+
+  h+=`<div class="rw" style="margin-top:16px;gap:14px;align-items:center;flex-wrap:wrap">
+    <div><b>Bảng A (Gốc):</b> 
+      <select id="mg-ta">${ST.tables.map((t,i)=>`<option value="${i}"${i===ta?' selected':''}>${esc(t.name)} (${t.n_rows||(t.rows.length-1)} dòng)</option>`).join('')}</select>
+    </div>
+    <div><b>Bảng B (Ghép vào):</b> 
+      <select id="mg-tb">${ST.tables.map((t,i)=>`<option value="${i}"${i===tb?' selected':''}>${esc(t.name)} (${t.n_rows||(t.rows.length-1)} dòng)</option>`).join('')}</select>
+    </div>
+    <div><b>Chế độ gộp:</b> 
+      <select id="mg-mode">
+        <option value="UNION"${mode==='UNION'?' selected':''}>📑 Gộp dòng (Append / Union)</option>
+        <option value="JOIN"${mode==='JOIN'?' selected':''}>🔗 Ghép theo khóa (Join / Match)</option>
+      </select>
+    </div>
+    <button class="add" id="mg-analyze" style="margin:0;padding:8px 16px;font-weight:600">🔍 Phân tích & So khớp</button>
+  </div>`;
+
+  if(ST.mgRes){
+    const M=ST.mgRes, rec=M.recommendation||{};
+    const recVn={UNION:'Gộp dòng (Append / Union)',JOIN:'Ghép theo khóa (Join / Match)',REVIEW_REQUIRED:'Cần xem xét'};
+    const colsA=M.schema_a.columns||[], colsB=M.schema_b.columns||[];
+    const keyCandidatesA=M.schema_a.key_candidates||[];
+    const keyCandidatesB=M.schema_b.key_candidates||[];
+
+    h+=`<div style="margin-top:16px;padding:16px;border-radius:10px;background:rgba(36,87,245,0.03);border:1px solid var(--line)">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <b>Đề xuất hệ thống:</b> 
+        <span class="badge" style="background:#e0f2fe;color:#0369a1;padding:4px 12px;font-weight:700;font-size:12px">${recVn[rec.mode]||rec.mode}</span>
+        <span style="color:var(--mute);font-size:13px">${esc(rec.reason||'')}</span>
+      </div>
+
+      <div style="display:flex;gap:20px;flex-wrap:wrap;margin-top:12px;padding:12px;background:rgba(255,255,255,0.7);border:1px solid var(--line);border-radius:8px">
+        <div style="flex:1;min-width:240px">
+          <div style="font-size:13px;font-weight:600;margin-bottom:4px">🔑 Khóa ứng viên Bảng A:</div>
+          ${keyCandidatesA.length?`<ul style="margin:4px 0;padding-left:18px;font-size:13px">${keyCandidatesA.slice(0,3).map(k=>`<li><b>${esc(k.column_name)}</b> (${(k.score*100).toFixed(0)}% điểm tin cậy${k.is_perfect_key?', 100% duy nhất':''})</li>`).join('')}</ul>`:'<p class="hint" style="margin:4px 0">Không tìm thấy khóa đơn đạt chuẩn.</p>'}
+          ${M.schema_a.composite_key_candidates&&M.schema_a.composite_key_candidates.length?`<div class="hint">Khóa kép gợi ý: ${M.schema_a.composite_key_candidates.map(k=>esc(k.column_names.join(' + '))).join('; ')}</div>`:''}
         </div>
+        <div style="flex:1;min-width:240px">
+          <div style="font-size:13px;font-weight:600;margin-bottom:4px">🔑 Khóa ứng viên Bảng B:</div>
+          ${keyCandidatesB.length?`<ul style="margin:4px 0;padding-left:18px;font-size:13px">${keyCandidatesB.slice(0,3).map(k=>`<li><b>${esc(k.column_name)}</b> (${(k.score*100).toFixed(0)}% điểm tin cậy${k.is_perfect_key?', 100% duy nhất':''})</li>`).join('')}</ul>`:'<p class="hint" style="margin:4px 0">Không tìm thấy khóa đơn đạt chuẩn.</p>'}
+          ${M.schema_b.composite_key_candidates&&M.schema_b.composite_key_candidates.length?`<div class="hint">Khóa kép gợi ý: ${M.schema_b.composite_key_candidates.map(k=>esc(k.column_names.join(' + '))).join('; ')}</div>`:''}
+        </div>
+      </div>`;
 
-        ${mode==='JOIN'?`
-          <div class="rw" style="margin-top:14px;padding:10px;background:rgba(255,255,255,0.06);border-radius:8px">
-            <b>Khóa ghép Bảng A:</b>
+    if(mode==='JOIN'){
+      h+=`<div style="margin-top:14px;padding:14px;background:#fff;border:1px solid var(--line);border-radius:8px">
+        <div style="font-weight:600;font-size:13px;margin-bottom:10px">⚙️ Cấu hình Ghép theo khóa (JOIN Settings):</div>
+        <div class="rw" style="gap:14px;align-items:center;flex-wrap:wrap">
+          <div><b>Loại ghép (Join Type):</b>
+            <select id="mg-join-type">
+              <option value="left"${joinType==='left'?' selected':''}>Left Join (Giữ toàn bộ dòng Bảng A - Mặc định)</option>
+              <option value="inner"${joinType==='inner'?' selected':''}>Inner Join (Chỉ lấy dòng có khóa khớp cả A và B)</option>
+              <option value="full"${joinType==='full'?' selected':''}>Full Outer Join (Lấy tất cả dòng từ A và B)</option>
+            </select>
+          </div>
+          <div><b>Khóa ghép Bảng A:</b>
             <select id="mg-key-a">${colsA.map(c=>`<option value="${esc(c.name)}"${c.name===ST.keyA||(keyCandidatesA[0]&&c.name===keyCandidatesA[0].column_name)?' selected':''}>${esc(c.name)}</option>`).join('')}</select>
-            <b>Khóa ghép Bảng B:</b>
+          </div>
+          <div><b>Khóa ghép Bảng B:</b>
             <select id="mg-key-b">${colsB.map(c=>`<option value="${esc(c.name)}"${c.name===ST.keyB||(keyCandidatesB[0]&&c.name===keyCandidatesB[0].column_name)?' selected':''}>${esc(c.name)}</option>`).join('')}</select>
           </div>
-        `:''}
-
-        <div class="tw" style="margin-top:14px">
-          <table>
-            <tr><th>Cột Bảng A</th><th>Cột Bảng B</th><th>Độ tương đồng</th><th>Trạng thái</th><th>Lý do & Chi tiết</th></tr>
-            ${M.matching.mappings.map(m=>`<tr>
-              <td><b>${esc(m.source_name)}</b></td>
-              <td><b>${esc(m.target_name)}</b></td>
-              <td>${(m.score*100).toFixed(0)}%</td>
-              <td><span class="badge" style="background:${m.status==='SAFE'?'#dcfce7':'#fef9c3'};color:${m.status==='SAFE'?'#15803d':'#a16207'};font-size:11px;font-weight:700">${m.status==='SAFE'?'An toàn':'Cần duyệt'}</span></td>
-              <td><small>${esc(m.reason)}</small></td>
-            </tr>`).join('')}
-          </table>
         </div>
-        ${M.matching.unmatched_sources.length||M.matching.unmatched_targets.length?`
-          <p class="hint" style="margin-top:8px">
-            ${M.matching.unmatched_sources.length?`Cột Bảng A chưa ghép: ${M.matching.unmatched_sources.map(c=>esc(c.name)).join(', ')}. `:''}
-            ${M.matching.unmatched_targets.length?`Cột Bảng B chưa ghép: ${M.matching.unmatched_targets.map(c=>esc(c.name)).join(', ')}.`:''}
-          </p>
-        `:''}
-
-        <div class="rw" style="margin-top:14px">
-          <button class="go" id="mg-exec" style="padding:10px 20px">⚡ Thực hiện gộp bảng vào phiên làm việc</button>
+        <div class="rw" style="margin-top:10px;gap:14px;align-items:center">
+          <div><b>Chiến lược giải quyết xung đột:</b>
+            <select id="mg-conflict">
+              <option value="prefer_a"${conflictStrat==='prefer_a'?' selected':''}>Ưu tiên Bảng A (Giữ dữ liệu Bảng A khi trùng cột - Mặc định)</option>
+              <option value="prefer_b"${conflictStrat==='prefer_b'?' selected':''}>Ưu tiên Bảng B (Lấy dữ liệu Bảng B khi có)</option>
+              <option value="keep_both"${conflictStrat==='keep_both'?' selected':''}>Giữ cả hai (Tách thành 2 cột riêng &lt;Tên&gt; (A) và &lt;Tên&gt; (B))</option>
+            </select>
+          </div>
         </div>
       </div>`;
     }
+
+    // Bảng Ánh xạ Cột
+    h+=`<div style="margin-top:14px">
+      <div style="font-weight:600;font-size:13px;margin-bottom:6px">📋 Bảng đối chiếu & Ánh xạ cột giữa hai bảng:</div>
+      <div class="tw">
+        <table>
+          <tr><th>Cột Bảng A (Đích)</th><th>Cột Bảng B (Nguồn)</th><th>Độ tương đồng</th><th>Đánh giá</th><th>Giải thích quy tắc khớp</th></tr>
+          ${M.matching.mappings.map(m=>`<tr>
+            <td><b>${esc(m.source_name)}</b></td>
+            <td><b>${esc(m.target_name)}</b></td>
+            <td>${(m.score*100).toFixed(0)}%</td>
+            <td><span class="badge" style="background:${m.status==='SAFE'?'#dcfce7':'#fef9c3'};color:${m.status==='SAFE'?'#15803d':'#a16207'};font-size:11px;font-weight:700">${m.status==='SAFE'?'✓ An toàn':'⚠ Cần duyệt'}</span></td>
+            <td><small style="color:var(--mute)">${esc(m.reason)}</small></td>
+          </tr>`).join('')}
+        </table>
+      </div>
+    </div>`;
+
+    // Hiển thị Preview Panel nếu đã bấm xem trước
+    if(ST.mgPreview){
+      const P=ST.mgPreview, pStats=P.stats||{};
+      h+=`<div style="margin-top:16px;padding:14px;background:#fff;border:2px solid var(--acc);border-radius:10px" id="mg-preview-box">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin-bottom:10px">
+          <div style="font-weight:700;font-size:14px;color:var(--ink)">👁️ Kết quả xem trước (Merge Preview):</div>
+          <div class="stats" style="margin:0;gap:10px">
+            <div>Tổng dòng: <b>${pStats.total_rows||0}</b></div>
+            ${pStats.matched_rows!==undefined?`<div>Khớp: <b style="color:var(--ok)">${pStats.matched_rows}</b></div>`:''}
+            ${pStats.missing_in_b!==undefined?`<div>Thiếu ở B: <b style="color:${pStats.missing_in_b?'#d97706':'var(--ink)'}">${pStats.missing_in_b}</b></div>`:''}
+            ${pStats.missing_in_a!==undefined?`<div>Thiếu ở A: <b style="color:${pStats.missing_in_a?'#d97706':'var(--ink)'}">${pStats.missing_in_a}</b></div>`:''}
+            <div>Xung đột: <b style="color:${pStats.conflicts_count?'var(--bad)':'var(--ok)'}">${pStats.conflicts_count||0}</b></div>
+          </div>
+        </div>`;
+
+      if(P.conflicts&&P.conflicts.length){
+        h+=`<div style="margin-bottom:12px;padding:10px;background:#fff5f5;border:1px solid #fed7d7;border-radius:6px">
+          <div style="font-weight:600;font-size:12.5px;color:#c53030;margin-bottom:4px">⚠ Phát hiện ${P.conflicts.length} trường hợp xung đột giá trị giữa Bảng A và B:</div>
+          <div class="tw" style="max-height:160px">
+            <table>
+              <tr><th>Khóa</th><th>Cột xung đột</th><th>Giá trị Bảng A</th><th>Giá trị Bảng B</th></tr>
+              ${P.conflicts.slice(0,5).map(cf=>`<tr>
+                <td><code>${esc(Array.isArray(cf.key)?cf.key.join(', '):cf.key)}</code></td>
+                <td><b>${esc(cf.col_a)}</b></td>
+                <td style="color:#2b6cb0">${esc(cf.val_a)}</td>
+                <td style="color:#c53030">${esc(cf.val_b)}</td>
+              </tr>`).join('')}
+            </table>
+          </div>
+        </div>`;
+      }
+
+      h+=`<div class="tw" style="max-height:220px">
+        <table>
+          <tr>${(P.headers||[]).map(hd=>`<th>${esc(hd)}</th>`).join('')}</tr>
+          ${(P.preview_rows||[]).map(rw=>`<tr>${rw.map(c=>`<td>${esc(c)}</td>`).join('')}</tr>`).join('')}
+        </table>
+      </div>
+      </div>`;
+    }
+
+    h+=`<div class="rw" style="margin-top:16px;gap:12px;align-items:center">
+      <button class="add" id="mg-preview" style="padding:10px 18px;font-weight:600;margin:0">👁️ Xem trước kết quả gộp</button>
+      <button class="go" id="mg-exec" style="padding:10px 22px;margin:0">⚡ Thực hiện gộp bảng vào phiên làm việc</button>
+    </div>
+    </div>`;
   }
+
   h+='</section>';
   return h;
 }
@@ -1045,7 +1134,7 @@ function mergeCard(){
 async function mgAnalyze(){
   const b=$('#mg-analyze');if(b){b.disabled=true;b.textContent='Đang phân tích…'}
   const ta=+($('#mg-ta').value||0), tb=+($('#mg-tb').value||1);
-  ST.mgTa=ta;ST.mgTb=tb;
+  ST.mgTa=ta;ST.mgTb=tb;ST.mgPreview=null;
   try{
     const res=await fapi('/api/merge/analyze',{table_a:ta,table_b:tb});
     if(res.success){
@@ -1064,19 +1153,59 @@ async function mgAnalyze(){
   ui();
 }
 
-async function mgExecute(){
-  const b=$('#mg-exec');if(b){b.disabled=true;b.textContent='Đang gộp bảng…'}
+async function mgPreview(){
+  const b=$('#mg-preview');if(b){b.disabled=true;b.textContent='Đang xem trước…'}
   const ta=+($('#mg-ta').value||0), tb=+($('#mg-tb').value||1);
   const mode=$('#mg-mode')?$('#mg-mode').value:'UNION';
+  const joinType=$('#mg-join-type')?$('#mg-join-type').value:'left';
+  const conflictStrat=$('#mg-conflict')?$('#mg-conflict').value:'prefer_a';
   const ka=$('#mg-key-a')?$('#mg-key-a').value:'';
   const kb=$('#mg-key-b')?$('#mg-key-b').value:'';
   const mappings=ST.mgRes&&ST.mgRes.matching?ST.mgRes.matching.mappings:[];
   try{
-    const r=await fapi('/api/merge/execute',{table_a:ta,table_b:tb,mode:mode,key_a:ka,key_b:kb,mappings:mappings});
+    const r=await fapi('/api/merge/preview',{
+      table_a:ta,table_b:tb,mode:mode,
+      join_type:joinType,conflict_strategy:conflictStrat,
+      key_a:ka,key_b:kb,mappings:mappings
+    });
     if(r.success){
-      alert('✓ Gộp bảng thành công: '+r.data.name+(r.data.matched_rows?' (Khớp '+r.data.matched_rows+' dòng)':'. Bảng mới đã được thêm vào phiên.'));
+      ST.mgPreview=r.data;
+      ui();
+      const pvBox=$('#mg-preview-box');
+      if(pvBox)pvBox.scrollIntoView({behavior:'smooth',block:'nearest'});
+    }else{
+      alert((r.errors&&r.errors[0]&&r.errors[0].message)||'Lỗi khi xem trước kết quả gộp.');
+    }
+  }catch(e){alert(e.message)}
+  if(b){b.disabled=false;b.textContent='👁️ Xem trước kết quả gộp'}
+}
+
+async function mgExecute(){
+  const b=$('#mg-exec');if(b){b.disabled=true;b.textContent='Đang gộp bảng…'}
+  const ta=+($('#mg-ta').value||0), tb=+($('#mg-tb').value||1);
+  const mode=$('#mg-mode')?$('#mg-mode').value:'UNION';
+  const joinType=$('#mg-join-type')?$('#mg-join-type').value:'left';
+  const conflictStrat=$('#mg-conflict')?$('#mg-conflict').value:'prefer_a';
+  const ka=$('#mg-key-a')?$('#mg-key-a').value:'';
+  const kb=$('#mg-key-b')?$('#mg-key-b').value:'';
+  const mappings=ST.mgRes&&ST.mgRes.matching?ST.mgRes.matching.mappings:[];
+  try{
+    const r=await fapi('/api/merge/execute',{
+      table_a:ta,table_b:tb,mode:mode,
+      join_type:joinType,conflict_strategy:conflictStrat,
+      key_a:ka,key_b:kb,mappings:mappings
+    });
+    if(r.success){
+      const stats=r.data.stats||{};
+      const rowMsg = mode==='UNION' ? ('Tổng '+(stats.total_rows||r.data.rows||'')+ ' dòng') : ('Khớp '+(r.data.matched_rows||stats.matched_rows||0)+' dòng');
+      alert('✓ Gộp bảng thành công!
+- Tên bảng mới: '+r.data.name+'
+- Thống kê: '+rowMsg+'
+
+Bảng mới đã được tự động thêm vào phiên làm việc.');
       ST.tables=r.data.tables;
       ST.mgRes=null;
+      ST.mgPreview=null;
       await loadTable(r.data.new_table_index,true,false);
     }else{
       alert((r.errors&&r.errors[0]&&r.errors[0].message)||'Lỗi khi gộp bảng.');

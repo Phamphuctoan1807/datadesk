@@ -2,7 +2,7 @@
 
 Phiên bản trong gói này: xem `VERSION` trong `server.py` (hiện ở góc trên giao diện và tại đường dẫn `/version`).
 
-Trạng thái: **Giai đoạn 1, 2, 3, 4, 5, 6, 8, 9 và 10 đã hoàn thành toàn diện và vượt qua 100% bộ kiểm thử tự động.**
+Trạng thái: **Toàn bộ 10/10 Giai đoạn bắt buộc cốt lõi (Giai đoạn 1 đến 10) đã hoàn thành toàn diện và vượt qua 100% bộ kiểm thử tự động.**
 
 ## Giai đoạn 1: Data Model
 - Bảng gốc bất biến + nhật ký thao tác + bảng dẫn xuất. Không bao giờ sửa dữ liệu gốc (có test).
@@ -63,6 +63,16 @@ Trạng thái: **Giai đoạn 1, 2, 3, 4, 5, 6, 8, 9 và 10 đã hoàn thành to
   - **Kiểm tra đối chiếu độc lập (mục 0 điểm 10 & mục 39):** Hàm `independent_merge_check` chạy lại thuật toán gộp độc lập bằng cấu trúc dữ liệu thuần túy, xác minh bất biến số dòng, tính toàn vẹn cấu trúc cột và đảm bảo dữ liệu gốc bất biến 100%.
 - **Tích hợp API:**
   - `POST /api/merge/execute` hoàn chỉnh cho cả 2 chế độ UNION và JOIN kèm đầy đủ thống kê `stats`, `conflicts`, `warnings`.
+
+## Giai đoạn 7: Giao diện Smart Merge (Smart Merge UI - mục 26, 27, 28, 61)
+- **Giao diện tương tác người dùng (`static/index.html`):**
+  - **Bộ chọn chế độ gộp thông minh (mục 28):** Chuyển đổi linh hoạt giữa Gộp dòng (`UNION`) và Ghép theo khóa (`JOIN`).
+  - **Cấu hình JOIN trực quan:** Hỗ trợ 3 kiểu kết nối (`left`, `inner`, `full`), dropdown chọn khóa định danh bảng A và B (tự động điền ứng viên tốt nhất).
+  - **Chiến lược giải quyết xung đột (mục 22):** Lựa chọn tức thì trên giao diện giữa `prefer_a` (giữ Bảng A), `prefer_b` (ưu tiên Bảng B) hoặc `keep_both` (tách thành hai cột riêng).
+  - **Bảng đối chiếu & Ánh xạ cột (mục 27):** Hiển thị trực quan cặp cột, độ tương đồng %, badge đánh giá SAFE / Cần duyệt, và giải thích chi tiết quy tắc so khớp.
+  - **Xem trước kết quả ghép (Merge Preview - mục 26):** API `POST /api/merge/preview` và bảng xem trước 10 dòng đầu kèm huy hiệu thống kê tức thì (tổng dòng, số dòng khớp, dòng thiếu ở A/B, số ô xung đột).
+  - **Bảng cảnh báo xung đột (Conflict Warning Panel):** Hiển thị chi tiết từng ô dữ liệu xung đột giữa A và B trước khi người dùng quyết định gộp thật.
+  - **Thực thi và chuyển bảng tự động:** Gộp bảng mượt mà, thông báo kết quả chi tiết và tự động nạp bảng mới vào màn hình làm việc.
 
 ## Giai đoạn 8: Xuất file đa định dạng (Export Expansion - mục 30 đến 36)
 - **Module độc lập `export.py`:**

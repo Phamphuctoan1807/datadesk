@@ -128,6 +128,29 @@ class TestMergeAPI(unittest.TestCase):
         self.assertFalse(inv_body["success"])
         self.assertEqual(inv_body["errors"][0]["code"], "INVALID_MODE")
 
+        # 9. Test xem trước kết quả gộp (/api/merge/preview)
+        res_pv_u = self.client.post(
+            "/api/merge/preview",
+            json={"id": sid, "table_a": 0, "table_b": 1, "mode": "UNION", "mappings": user_mappings},
+            headers=hdrs
+        )
+        self.assertEqual(res_pv_u.status_code, 200)
+        pv_u_body = res_pv_u.get_json()
+        self.assertTrue(pv_u_body["success"])
+        self.assertIn("headers", pv_u_body["data"])
+        self.assertIn("preview_rows", pv_u_body["data"])
+        self.assertEqual(len(pv_u_body["data"]["preview_rows"]), 4)
+
+        res_pv_j = self.client.post(
+            "/api/merge/preview",
+            json={"id": sid, "table_a": 0, "table_b": 2, "mode": "JOIN", "key_a": "Mã KH", "key_b": "Mã KH", "join_type": "left"},
+            headers=hdrs
+        )
+        self.assertEqual(res_pv_j.status_code, 200)
+        pv_j_body = res_pv_j.get_json()
+        self.assertTrue(pv_j_body["success"])
+        self.assertEqual(pv_j_body["data"]["stats"]["matched_rows"], 2)
+
     def test_unauthenticated_blocked(self):
         # Thoát đăng nhập
         client = server.app.test_client()

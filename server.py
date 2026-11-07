@@ -889,6 +889,60 @@ def merge_mapping():
         return R(False, errors=[{"code": "INVALID_MAPPING", "message": err} for err in validation["errors"]], warnings=validation["warnings"])
     return R(True, data={"valid": True, "mappings": mappings}, warnings=validation["warnings"])
 
+@app.post("/api/merge/preview")
+def merge_preview():
+    p = request.get_json(silent=True) or {}
+    rec = STORE.get(p.get("id"))
+    if not rec:
+        raise ValueError("Phiên làm việc đã hết hạn, hãy tải file lên lại.")
+    ti_a = int(p.get("table_a", 0))
+    ti_b = int(p.get("table_b", 1))
+    mode = str(p.get("mode", "UNION")).upper()
+    join_key_a = p.get("key_a")
+    join_key_b = p.get("key_b")
+    mappings = p.get("mappings") or []
+    join_type = str(p.get("join_type", "left")).lower()
+    conflict_strategy = str(p.get("conflict_strategy", "prefer_a")).lower()
+
+    t_a = get_table(rec, ti_a)
+    t_b = get_table(rec, ti_b)
+    hdr_a = guess_header(t_a) or bool(t_a.get("derived"))
+    hdr_b = guess_header(t_b) or bool(t_b.get("derived"))
+    headers_a = [disp(c).strip() or ("Cột %d" % (j + 1)) for j, c in enumerate(t_a["rows"][0])] if hdr_a else ["Cột %d" % (j + 1) for j in range(len(t_a["rows"][0]))]
+    body_a = t_a["rows"][1:] if hdr_a else t_a["rows"]
+    headers_b = [disp(c).strip() or ("Cột %d" % (j + 1)) for j, c in enumerate(t_b["rows"][0])] if hdr_b else ["Cột %d" % (j + 1) for j in range(len(t_b["rows"][0]))]
+    body_b = t_b["rows"][1:] if hdr_b else t_b["rows"]
+
+    if mode == "UNION":
+        u_res = ME.execute_union(headers_a, body_a, headers_b, body_b, col_mapping=mappings)
+        pv_rows = [[disp(x) for x in r] for r in u_res["rows"][:10]]
+        return R(True, data={
+            "headers": u_res["headers"],
+            "preview_rows": pv_rows,
+            "stats": u_res["stats"]
+        })
+
+    elif mode == "JOIN":
+        try:
+            j_res = ME.execute_join(
+                headers_a, body_a, headers_b, body_b,
+                key_a=join_key_a, key_b=join_key_b,
+                join_type=join_type,
+                conflict_strategy=conflict_strategy
+            )
+        except ValueError as ex:
+            return R(False, errors=[{"code": "JOIN_EXPANSION_ERROR", "message": str(ex)}])
+
+        pv_rows = [[disp(x) for x in r] for r in j_res["rows"][:10]]
+        return R(True, data={
+            "headers": j_res["headers"],
+            "preview_rows": pv_rows,
+            "stats": j_res["stats"],
+            "conflicts": j_res["conflicts"][:20]
+        }, warnings=j_res["stats"].get("warnings", []))
+
+    return R(False, errors=[{"code": "INVALID_MODE", "message": "Chế độ gộp không hợp lệ."}])
+
 @app.post("/api/merge/execute")
 def merge_execute():
     p = request.get_json(silent=True) or {}
