@@ -1,27 +1,126 @@
 <!DOCTYPE html>
 <html lang="vi"><head><meta charset="utf-8"><title>Đăng nhập · DataDesk</title>
 <meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex, nofollow">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
-*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0f1b2d;color:#15202e;font:400 15px/1.5 "Be Vietnam Pro",system-ui,sans-serif;padding:16px}
-.c{background:#fff;border-radius:12px;padding:30px 28px;width:100%;max-width:380px}
-.logo{width:38px;height:38px;border-radius:9px;background:#2457f5;color:#fff;display:grid;place-items:center;font-weight:700;margin-bottom:14px}
-h1{font-size:21px;margin:0 0 4px}p{margin:0 0 18px;color:#5d6b7d;font-size:13.5px}
-.w{display:flex;gap:8px}input{flex:1;min-width:0;font:inherit;border:1px solid #d9e0e9;border-radius:8px;padding:11px 12px}
-.s{border:1px solid #d9e0e9;background:#fff;border-radius:8px;padding:0 12px;cursor:pointer;font:inherit;color:#5d6b7d}
-.go{width:100%;margin-top:12px;background:#2457f5;color:#fff;border:0;border-radius:8px;padding:12px;font:inherit;font-weight:700;cursor:pointer}
-.go:disabled{opacity:.6}.v{color:#5d6b7d;font-size:12px;margin:14px 0 0;text-align:center}#m{color:#b3261e;min-height:1.3em;margin:10px 0 0;font-size:13.5px}:focus-visible{outline:2px solid #2457f5;outline-offset:2px}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0b1320;color:#15202e;font:400 15px/1.5 "Be Vietnam Pro",system-ui,sans-serif;padding:16px;overflow:hidden;position:relative}
+#bg-canvas{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}
+.c{background:rgba(255,255,255,0.88);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,0.4);border-radius:14px;padding:32px 28px;width:100%;max-width:390px;box-shadow:0 25px 50px -12px rgba(0,0,0,0.5),0 0 30px rgba(36,87,245,0.15);position:relative;z-index:2;animation:fadeIn 0.3s ease-out}
+.logo{width:42px;height:42px;border-radius:10px;background:linear-gradient(135deg,#2457f5,#00f0ff);color:#fff;display:grid;place-items:center;font-weight:700;font-size:20px;margin-bottom:16px;box-shadow:0 8px 16px rgba(36,87,245,0.35)}
+h1{font-size:22px;margin:0 0 4px;font-weight:700;letter-spacing:-0.3px}
+p{margin:0 0 20px;color:#52647a;font-size:14px}
+.w{display:flex;gap:8px}
+input{flex:1;min-width:0;font:inherit;border:1px solid #d1d9e2;background:rgba(255,255,255,0.9);border-radius:8px;padding:12px 14px;transition:all 0.2s}
+input:focus{outline:none;border-color:#2457f5;box-shadow:0 0 0 3px rgba(36,87,245,0.15);background:#fff}
+.s{border:1px solid #d1d9e2;background:rgba(255,255,255,0.9);border-radius:8px;padding:0 14px;cursor:pointer;font:inherit;font-weight:500;color:#52647a;transition:all 0.2s}
+.s:hover{background:#f1f5f9;color:#1e293b}
+.go{width:100%;margin-top:14px;background:linear-gradient(135deg,#2457f5,#1d4ed8);color:#fff;border:0;border-radius:8px;padding:12px;font:inherit;font-weight:600;cursor:pointer;box-shadow:0 4px 12px rgba(36,87,245,0.3);transition:all 0.2s}
+.go:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(36,87,245,0.4)}
+.go:active{transform:translateY(0)}
+.go:disabled{opacity:.6;cursor:not-allowed;transform:none}
+.v{color:#64748b;font-size:12px;margin:16px 0 0;text-align:center;font-family:"JetBrains Mono",monospace}
+#m{color:#dc2626;min-height:1.3em;margin:10px 0 0;font-size:13.5px;font-weight:500}
+:focus-visible{outline:2px solid #2457f5;outline-offset:2px}
 [hidden]{display:none!important}
-.ov{position:fixed;inset:0;background:rgba(15,27,45,.9);display:grid;place-items:center;padding:16px;z-index:10}
-.md{background:#fff;border-radius:12px;padding:30px 28px;width:100%;max-width:380px;text-align:center}
-.md .logo{margin:0 auto 14px}.md h2{font-size:21px;margin:0 0 6px}.md p{margin:0 0 20px;font-size:16px;color:#15202e}
+.ov{position:fixed;inset:0;background:rgba(11,19,32,0.75);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);display:grid;place-items:center;padding:16px;z-index:10;animation:fadeIn 0.25s ease-out}
+.md{background:rgba(255,255,255,0.92);backdrop-filter:blur(18px);-webkit-backdrop-filter:blur(18px);border:1px solid rgba(255,255,255,0.5);border-radius:14px;padding:34px 30px;width:100%;max-width:390px;text-align:center;box-shadow:0 25px 50px -12px rgba(0,0,0,0.5),0 0 30px rgba(36,87,245,0.2)}
+.md .logo{margin:0 auto 16px}.md h2{font-size:22px;margin:0 0 8px;font-weight:700}.md p{margin:0 0 24px;font-size:16px;color:#1e293b}
+@keyframes fadeIn{from{opacity:0;transform:scale(0.97)}to{opacity:1;transform:scale(1)}}
 </style></head><body>
+<canvas id="bg-canvas"></canvas>
 <div class="ov" id="ov" role="dialog" aria-modal="true" aria-labelledby="ot"><div class="md"><div class="logo">D</div>
 <h2 id="ot">Chào mừng bạn</h2><p>Đây là dự án của <b>Toàn Phạm</b>.</p><button class="go" id="ok" type="button">Đã hiểu, tiếp tục</button></div></div>
 <form class="c" id="f" hidden><div class="logo">D</div><h1>DataDesk</h1><p>Trang riêng tư. Nhập mật khẩu để tiếp tục.</p>
 <div class="w"><input id="p" type="password" autocomplete="current-password" placeholder="Mật khẩu" required><button type="button" class="s" id="t">Hiện</button></div>
 <button class="go" id="b">Đăng nhập</button><p id="m" role="alert"></p><p class="v" id="ver"></p></form>
 <script>
+// --- Canvas Hạt Dữ Liệu Hỗn Loạn & Đẩy Chuột (Physics) ---
+(function(){
+  const cvs = document.getElementById('bg-canvas');
+  if(!cvs) return;
+  const ctx = cvs.getContext('2d');
+  let W = cvs.width = window.innerWidth;
+  let H = cvs.height = window.innerHeight;
+  window.addEventListener('resize', ()=>{ W = cvs.width = window.innerWidth; H = cvs.height = window.innerHeight; });
+
+  const TOKENS = [
+    '0101', '42.5%', 'NULL', 'ID:904', '∑', '.xlsx', 'JSON', 'C++', '2026', 'VARCHAR',
+    'TRUE', '1.234,5', 'VND', 'λ', 'UTF-8', 'TABLE', 'SCHEMA', 'KEY:01', 'APPEND', 'JOIN',
+    'CSV', 'REGEX', 'DATA', 'HASH', 'BYTE', '0xFF', 'TOKEN', 'PARSER', 'NODE', 'INDEX'
+  ];
+  const COLORS = ['#2457f5', '#00f2fe', '#a855f7', '#10b981', '#f59e0b', '#38bdf8', '#818cf8'];
+
+  const count = Math.min(65, Math.floor((W * H) / 16000));
+  const particles = [];
+
+  for(let i=0; i<count; i++){
+    particles.push({
+      x: Math.random() * W,
+      y: Math.random() * H,
+      vx: (Math.random() - 0.5) * 0.7,
+      vy: (Math.random() - 0.5) * 0.7,
+      baseVx: (Math.random() - 0.5) * 0.6,
+      baseVy: (Math.random() - 0.5) * 0.6,
+      text: TOKENS[Math.floor(Math.random() * TOKENS.length)],
+      color: COLORS[Math.floor(Math.random() * COLORS.length)],
+      size: Math.floor(Math.random() * 5) + 11, // 11px - 15px
+      alpha: Math.random() * 0.5 + 0.35,
+      rot: (Math.random() - 0.5) * 0.2
+    });
+  }
+
+  const mouse = { x: -9999, y: -9999, radius: 130 };
+  window.addEventListener('mousemove', e => { mouse.x = e.clientX; mouse.y = e.clientY; });
+  window.addEventListener('mouseleave', () => { mouse.x = -9999; mouse.y = -9999; });
+
+  function render(){
+    ctx.clearRect(0, 0, W, H);
+
+    for(let i=0; i<particles.length; i++){
+      const p = particles[i];
+
+      // Đẩy chuột (Mouse Repulsion Physics)
+      const dx = p.x - mouse.x;
+      const dy = p.y - mouse.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+
+      if(dist < mouse.radius && dist > 0){
+        const force = (mouse.radius - dist) / mouse.radius;
+        const pushX = (dx / dist) * force * 5.0;
+        const pushY = (dy / dist) * force * 5.0;
+        p.vx += pushX;
+        p.vy += pushY;
+      }
+
+      // Giảm tốc ma sát về tốc độ trôi tự nhiên
+      p.vx = p.vx * 0.94 + p.baseVx * 0.06;
+      p.vy = p.vy * 0.94 + p.baseVy * 0.06;
+
+      p.x += p.vx;
+      p.y += p.vy;
+
+      // Wrap-around qua biên màn hình
+      if(p.x < -60) p.x = W + 50;
+      else if(p.x > W + 60) p.x = -50;
+      if(p.y < -30) p.y = H + 30;
+      else if(p.y > H + 30) p.y = -30;
+
+      // Vẽ chữ dữ liệu
+      ctx.save();
+      ctx.font = `${p.size}px "JetBrains Mono", monospace`;
+      ctx.fillStyle = p.color;
+      ctx.globalAlpha = p.alpha;
+      ctx.fillText(p.text, p.x, p.y);
+      ctx.restore();
+    }
+
+    requestAnimationFrame(render);
+  }
+  requestAnimationFrame(render);
+})();
+
+// --- Logic xác thực & đăng nhập ---
 const f=document.getElementById('f'),p=document.getElementById('p'),m=document.getElementById('m'),b=document.getElementById('b');
 fetch('/version').then(r=>r.json()).then(d=>{document.getElementById('ver').textContent='Phiên bản '+d.version}).catch(()=>{});
 const ov=document.getElementById('ov'),ok=document.getElementById('ok');
