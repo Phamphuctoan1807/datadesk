@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="vi"><head><meta charset="utf-8"><title>DataDesk · Sắp xếp, tô màu và xuất dữ liệu</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;700&display=swap">
+<style>
+:root{--bg:#f2f4f8;--card:#fff;--ink:#15202e;--mute:#5d6b7d;--line:#d9e0e9;--acc:#2457f5;--navy:#0f1b2d;--ok:#12803f;--bad:#b3261e;--soft:#eaf0ff}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 14.5px/1.55 "Be Vietnam Pro",system-ui,"Segoe UI",Roboto,sans-serif}
+.top{background:var(--navy);color:#fff;padding:14px 24px;display:flex;align-items:center;gap:12px}
+.logo{width:30px;height:30px;border-radius:7px;background:var(--acc);display:grid;place-items:center;font-weight:700}
+.top b{font-size:17px}.top span{color:#9fb0c6;font-size:13px}
+main{max-width:1040px;margin:0 auto;padding:22px 16px 60px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:18px 20px;margin-bottom:14px}
+.card h2{font-size:16px;margin:0 0 4px}.sub{color:var(--mute);margin:0 0 14px;font-size:13px}
+#drop{display:block;border:2px dashed var(--line);border-radius:10px;padding:34px 14px;text-align:center;cursor:pointer;color:var(--mute)}
+#drop:hover,#drop.on,#drop:focus-within{border-color:var(--acc);background:var(--soft)}
+#drop b{display:block;color:var(--ink);font-size:17px;margin-bottom:4px}#drop input{position:absolute;opacity:0;width:1px;height:1px}
+#msg{margin:10px 0 0;color:var(--bad);font-weight:500;min-height:1.2em}#msg.ok{color:var(--mute);font-weight:400}
+.rw{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:8px}
+.rw>b{min-width:92px;font-weight:500;color:var(--mute);font-size:13px}
+select,input:not([type=checkbox]):not([type=color]){font:inherit;color:var(--ink);background:#fff;border:1px solid var(--line);border-radius:6px;padding:7px 9px;max-width:100%}
+input[type=color]{width:38px;height:34px;border:1px solid var(--line);border-radius:6px;padding:2px;background:#fff}
+input:disabled{background:var(--bg)}
+button{font:inherit;cursor:pointer}
+.add{border:1px dashed var(--acc);color:var(--acc);background:#fff;border-radius:6px;padding:6px 12px;font-weight:500}
+.rm{border:0;background:none;color:var(--mute);font-size:18px;padding:2px 8px}.rm:hover{color:var(--bad)}
+.go{background:var(--acc);color:#fff;border:0;border-radius:8px;padding:12px 24px;font-weight:700;font-size:15px;text-decoration:none;display:inline-block}
+.go:disabled{opacity:.6}
+.tw{overflow:auto;max-height:380px;border:1px solid var(--line);border-radius:6px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:6px 10px;text-align:left;border-bottom:1px solid var(--line);white-space:nowrap;max-width:260px;overflow:hidden;text-overflow:ellipsis}
+th{background:#eef2f7;position:sticky;top:0}.fl td{color:var(--ink)}
+.stats{display:flex;flex-wrap:wrap;gap:8px 22px;margin:0 0 12px}.stats div{color:var(--mute)}.stats b{color:var(--ink);font-size:18px;margin-right:4px}
+.chips{display:flex;flex-wrap:wrap;gap:6px 14px;margin-bottom:12px}.chips label{display:flex;gap:6px;align-items:center}
+.chk{list-style:none;padding:0;margin:0 0 14px}.chk li{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--line)}
+.chk .ic{font-weight:700;width:18px;flex:none}.y .ic{color:var(--ok)}.n .ic{color:var(--bad)}.chk small{display:block;color:var(--mute)}
+.verdict{font-weight:700;font-size:16px;margin:0 0 8px}
+.hint{color:var(--mute);font-size:13px;margin:6px 0 0}
+:focus-visible{outline:2px solid var(--acc);outline-offset:2px}
+.rt{margin-left:auto;display:flex;gap:12px;align-items:center}.badge{background:#1d2c44;color:#9fb0c6!important;border-radius:999px;padding:3px 11px;font-size:12px!important}
+.lo{background:none;border:1px solid #3a4b66;color:#dbe4f0;border-radius:6px;padding:5px 12px}.lo:hover{background:#1d2c44}
+.sg{display:flex;gap:12px;align-items:center;justify-content:space-between;border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:8px}.sg small{display:block;color:var(--mute)}
+.gr td{cursor:pointer}.gr td:hover{outline:1px solid var(--acc);outline-offset:-1px}.gr td.mkd{background:#FF5C5C;color:#15202e}.gr td.rn{color:var(--mute);background:#eef2f7;cursor:default;outline:0}
+.add:disabled{opacity:.45;cursor:not-allowed}
+.bar{position:sticky;bottom:0;z-index:5;background:#fff;border:1px solid var(--line);border-radius:10px;padding:10px 16px;display:flex;justify-content:space-between;align-items:center;gap:12px;box-shadow:0 -4px 14px rgba(15,27,45,.12)}
+.chip{border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:999px;padding:4px 11px;font-size:13px}.chip:hover{border-color:var(--acc);background:var(--soft)}
+code{background:#eef2f7;border-radius:4px;padding:1px 5px;font-size:13px}
+.top{flex-wrap:wrap;gap:8px 12px}.sg{flex-wrap:wrap}
+@media (max-width:640px){.top{padding:10px 14px}.top>span{display:none}.rt{gap:8px}.badge{font-size:11px!important;padding:2px 8px}.sg>.rw{width:100%}main{padding:16px 10px 70px}.card{padding:14px}}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:13px;color:var(--mute)}label.f input:not([type=checkbox]),label.f textarea{width:100%}
+</style></head><body>
+<div class="top"><div class="logo">D</div><b>DataDesk</b><span>Sắp xếp, tô màu và xuất dữ liệu từ file</span><div class="rt"><span class="badge" id="eng"></span><button class="lo" id="out">Đăng xuất</button></div></div>
+<main>
+<section class="card"><h2>Tải file lên</h2><p class="sub">PDF, Word (.docx), Excel (.xlsx), CSV, TSV, TXT hoặc JSON. Tối đa 30 MB.</p>
+<label id="drop"><input type="file" id="file" accept=".pdf,.docx,.xlsx,.xlsm,.csv,.tsv,.txt,.json"><b>Chọn file hoặc kéo thả vào đây</b>Hệ thống sẽ rà soát dữ liệu và hiện các tùy chọn bên dưới</label>
+<p id="msg" role="status" aria-live="polite"></p></section>
+<div id="work"></div>
+</main>
+<script>
+const $=q=>document.querySelector(q),esc=s=>String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const OPS=[['contains','chứa'],['eq','bằng'],['gt','lớn hơn'],['lt','nhỏ hơn'],['empty','để trống'],['notempty','không trống'],['dup','bị trùng']];
+const PAL=['#FFE08A','#FFB4B4','#B8F0CF','#B9D5FF','#E0CCFF'],TN={text:'Văn bản',number:'Số',date:'Ngày'};
+let ST=null;
+async function api(u,o){o=o||{};o.headers=Object.assign({'X-Requested-With':'datadesk'},o.headers||{});const r=await fetch(u,o);if(r.status===401){location='/login';throw new Error('Phiên đăng nhập đã hết hạn.')}let d={};try{d=await r.json()}catch(e){}if(!r.ok||d.error)throw new Error(d.error||'Lỗi máy chủ ('+r.status+')');return d}
+function msg(t,ok){const m=$('#msg');m.textContent=t||'';m.className=ok?'ok':''}
+async function upload(f){
+  msg('Đang đọc file…',1);const fd=new FormData();fd.append('file',f);
+  try{const d=await api('/api/analyze',{method:'POST',body:fd});
+    ST={id:d.id,name:d.name,tables:d.tables,t:0,fc:{op_id:null,target:'',expr:'',res:null,ai:'',note:''},ops:null,rep:null,sorts:[{col:-1,dir:'asc',type:'auto'}],hls:[],flts:[],mode:'all',onlyHl:false,fmt:'xlsx',res:null};
+    setInfo(d.tables[0]);msg('');suggest()}catch(e){msg(e.message)}}
+function setInfo(i,keep){ST.info=i;ST.hdr=i.header;ST.res=null;
+  if(!keep||!ST.cols||ST.cols.length!==i.columns.length)ST.cols=i.columns.map((_,c)=>c);
+  if(!keep){ST.sorts=[{col:-1,dir:'asc',type:'auto'}];ST.hls=[];ST.flts=[];ST.sug=null;ST.marks=new Set();ST.me=false;ST.grid=null}ui();loadGrid(i.header?1:0);loadOps()}
+async function loadGrid(start){try{ST.grid=await api(`/api/rows?id=${ST.id}&t=${ST.t}&start=${start}&n=100`);ui()}catch(e){msg(e.message)}}
+function pageGrid(d){loadGrid(Math.max(ST.hdr?1:0,ST.grid.start+d*100))}
+async function loadTable(t,h,keep){try{const i=await api(`/api/table?id=${ST.id}&t=${t}&header=${h?1:0}`);ST.t=t;setInfo(i,keep)}catch(e){msg(e.message)}}
+const D=(k,i,f)=>`data-k="${k}" data-i="${i}" data-f="${f}"`;
+const colSel=(k,i,v)=>`<select ${D(k,i,'col')}><option value="-1">Chọn cột…</option>${ST.info.columns.map((c,n)=>`<option value="${n}"${n==v?' selected':''}>${esc(c.name)}</option>`).join('')}</select>`;
+const opSel=(k,r,i)=>`<select ${D(k,i,'op')}>${OPS.map(o=>`<option value="${o[0]}"${r.op===o[0]?' selected':''}>${o[1]}</option>`).join('')}</select>`;
+const valIn=(k,r,i)=>`<input ${D(k,i,'value')} value="${esc(r.value||'')}" placeholder="Giá trị" ${['empty','notempty','dup'].includes(r.op)?'disabled':''}>`;
+const rm=(k,i)=>`<button class="rm" data-rm="${k}" data-i="${i}" aria-label="Xóa dòng này">×</button>`;
+function ui(){
+  const I=ST.info,C=I.columns;let h='';
+  h+=`<section class="card"><h2>Kết quả rà soát: ${esc(ST.name)}</h2><p class="sub">Kiểm tra lại các cột và kiểu dữ liệu nhận diện trước khi chọn cách xử lý.</p>
+  <div class="rw">${ST.tables.length>1?`<select id="tsel">${ST.tables.map((x,i)=>`<option value="${i}"${i===ST.t?' selected':''}>${esc(x.name)}</option>`).join('')}</select>`:''}
+  <label class="chips" style="margin:0"><span><input type="checkbox" id="hdr"${ST.hdr?' checked':''}${ST.ops&&ST.ops.list.length?' disabled':''}> Dòng đầu tiên là tiêu đề cột</span></label></div>
+  <div class="stats"><div><b>${I.n_rows}</b>dòng dữ liệu</div><div><b>${I.n_cols}</b>cột</div><div><b>${I.empty}</b>ô trống</div><div><b>${I.dup}</b>dòng trùng hoàn toàn</div></div>
+  ${I.dropped?`<p class="hint">${I.dropped} dòng trống hoàn toàn trong file gốc sẽ không đưa vào kết quả.</p>`:''}
+  ${I.colored?`<p class="hint">File gốc có ${I.colored} ô đã tô màu. Các màu này được giữ nguyên khi xuất Excel.</p>`:''}
+  <div class="tw"><table><tr><th>Cột</th><th>Kiểu nhận diện</th><th>Ô trống</th><th>Giá trị khác nhau</th><th>Ví dụ</th></tr>${C.map(c=>`<tr><td>${esc(c.name)}</td><td>${TN[c.type]}</td><td>${c.empty}</td><td>${c.unique}</td><td>${esc(c.sample)}</td></tr>`).join('')}</table></div></section>`;
+  h+=pipeCard();
+  h+=nzCard();
+  h+=fcCard();
+  h+=rlCard();
+  h+=mergeCard();
+  h+=sug();
+  h+=`<section class="card"><h2>Sắp xếp</h2><p class="sub">Có thể xếp nhiều cấp. Ô trống luôn nằm cuối.</p>${ST.sorts.map((s,i)=>`<div class="rw"><b>${i?'Sau đó theo':'Sắp xếp theo'}</b>${colSel('sorts',i,s.col)}
+  <select ${D('sorts',i,'dir')}><option value="asc"${s.dir==='asc'?' selected':''}>Tăng dần (A→Z, nhỏ→lớn, cũ→mới)</option><option value="desc"${s.dir==='desc'?' selected':''}>Giảm dần (Z→A, lớn→nhỏ, mới→cũ)</option></select>
+  <select ${D('sorts',i,'type')}>${[['auto','Tự nhận diện kiểu'],['text','Văn bản'],['number','Số'],['date','Ngày']].map(a=>`<option value="${a[0]}"${s.type===a[0]?' selected':''}>${a[1]}</option>`).join('')}</select>${rm('sorts',i)}</div>`).join('')}
+  ${ST.sorts.length<5?'<button class="add" data-add="sorts">+ Thêm cấp sắp xếp</button>':''}</section>`;
+  h+=`<section class="card"><h2>Tô màu</h2><p class="sub">Ô hoặc dòng thỏa điều kiện sẽ được tô màu trong file Excel. Quy tắc nào khớp trước sẽ được ưu tiên.</p>${ST.hls.map((r,i)=>`<div class="rw"><b>Nếu cột</b>${colSel('hls',i,r.col)}${opSel('hls',r,i)}${valIn('hls',r,i)}
+  <input type="color" ${D('hls',i,'color')} value="${r.color}" aria-label="Màu tô"><select ${D('hls',i,'scope')}><option value="row"${r.scope==='row'?' selected':''}>Tô cả dòng</option><option value="cell"${r.scope==='cell'?' selected':''}>Chỉ tô ô</option></select>${rm('hls',i)}</div>`).join('')}
+  <button class="add" data-add="hls">+ Thêm quy tắc tô màu</button></section>`;
+  h+=mkCard();
+  h+=`<section class="card"><h2>Chọn dữ liệu cần xuất</h2><p class="sub">Chỉ xuất những cột và dòng bạn muốn. Để trống phần lọc nếu muốn xuất tất cả dòng.</p>
+  <div class="chips">${C.map((c,n)=>`<label><input type="checkbox" data-col="${n}"${ST.cols.includes(n)?' checked':''}> ${esc(c.name)}</label>`).join('')}</div>
+  ${ST.flts.map((r,i)=>`<div class="rw"><b>${i?(ST.mode==='all'?'Và':'Hoặc'):'Chỉ giữ dòng có'}</b>${colSel('flts',i,r.col)}${opSel('flts',r,i)}${valIn('flts',r,i)}${rm('flts',i)}</div>`).join('')}
+  <div class="rw"><button class="add" data-add="flts">+ Thêm điều kiện lọc dòng</button>${ST.flts.length>1?`<select id="mode"><option value="all"${ST.mode==='all'?' selected':''}>Dòng phải thỏa tất cả điều kiện</option><option value="any"${ST.mode==='any'?' selected':''}>Dòng thỏa một trong các điều kiện</option></select>`:''}
+  ${ST.hls.length||ST.marks.size||ST.me||I.colored?`<label><input type="checkbox" id="onlyhl"${ST.onlyHl?' checked':''}> Chỉ xuất các dòng có ô được tô màu</label>`:''}</div></section>`;
+  h+=`<section class="card"><h2>Xuất file</h2><div class="rw"><select id="fmt"><option value="xlsx"${ST.fmt==='xlsx'?' selected':''}>Excel (.xlsx), giữ màu tô</option><option value="csv"${ST.fmt==='csv'?' selected':''}>CSV (.csv), không có màu</option></select>
+  <button class="go" id="go">Xử lý và kiểm tra dữ liệu</button></div><p class="hint">Sau khi xử lý, hệ thống đọc lại file vừa tạo và đối chiếu với file gốc. Chỉ khi mọi bước đạt thì nút tải về mới xuất hiện.</p>${res()}</section>`;
+  h+=bar();
+  $('#work').innerHTML=h}
+function res(){const r=ST.res;if(!r)return'';
+  if(r.error)return`<p class="verdict" id="res" style="color:var(--bad)">${esc(r.error)}</p>`;
+  let h=`<div id="res" style="margin-top:14px"><p class="verdict" style="color:var(--${r.ok?'ok':'bad'})">${r.ok?'Dữ liệu đã được kiểm tra, toàn bộ chính xác.':'Có điểm chưa khớp ở bước kiểm tra (xem dấu ✗ bên dưới). Bạn vẫn có thể tải file, nhưng nên kiểm tra kỹ trước khi dùng.'}</p><p class="hint" style="margin:0 0 6px">Dữ liệu được xử lý bằng bộ xử lý ${esc(r.engine)} và đối chiếu lại bằng bản Python độc lập. Trạng thái quy trình: <b>${({SAFE:'An toàn',REVIEW_REQUIRED:'Cần kiểm tra',UNSAFE:'Không an toàn'})[r.status]||''}</b>.</p>
+  <ul class="chk">${r.checks.map(c=>`<li class="${c.ok?'y':'n'}"><span class="ic">${c.ok?'✓':'✗'}</span><span>${esc(c.t)}<small>${esc(c.d)}</small></span></li>`).join('')}</ul>`;
+  h+=`<p class="sub">Xem trước ${Math.min(r.preview.length-(r.header?1:0),100)} trên ${r.total} dòng:</p><div class="tw"><table>${r.preview.map((row,i)=>{const th=r.header&&i===0;return'<tr class="fl">'+row.map((v,c)=>{const f=r.fills[i][c];return`<${th?'th':'td'}${f?` style="background:${f}"`:''}>${esc(v)}</${th?'th':'td'}>`}).join('')+'</tr>'}).join('')}</table></div>`;
+  if(!r.total)h+='<p class="hint">Không có dòng nào khớp điều kiện nên file chỉ có dòng tiêu đề.</p>';
+  if(r.token)h+=`<p style="margin:14px 0 0"><a class="go" href="/api/download/${r.token}" download="${esc(r.filename)}">${r.ok?'Tải ':'Vẫn tải '}${esc(r.filename)}</a></p>`;
+  return h+'</div>'}
+async function run(auto){
+  document.querySelectorAll('#go,#go2').forEach(b=>{b.disabled=true;b.textContent='Đang xử lý và kiểm tra…'});
+  const ok=L=>L.filter(x=>x.col>=0);
+  try{ST.res=await api('/api/process',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:ST.id,table:ST.t,header:ST.hdr,sorts:ok(ST.sorts),highlights:ok(ST.hls),filters:ok(ST.flts),filter_mode:ST.mode,only_highlighted:ST.onlyHl,marks:[...ST.marks].map(k=>k.split(':').map(Number)),mark_empty:ST.me,columns:ST.cols,format:ST.fmt})})}
+  catch(e){ST.res={error:e.message}}
+  ui();if(auto&&ST.res.ok&&ST.res.token){const a=document.createElement('a');a.href='/api/download/'+ST.res.token;a.download=ST.res.filename;document.body.appendChild(a);a.click();a.remove()}
+  const r=$('#res');if(r)r.scrollIntoView({behavior:'smooth',block:'center'})}
+const W=$('#work');
+W.addEventListener('input',e=>{const el=e.target,d=el.dataset;if(d.k){ST[d.k][+d.i][d.f]=el.value;ST.res=null}else if(el.id==='fc-t')ST.fc.target=el.value;else if(el.id==='fc-e')ST.fc.expr=el.value;else if(el.id==='fc-ai')ST.fc.ai=el.value;else if(el.id==='nz-name')ST.nz.name=el.value;else if(el.dataset.nzo!==undefined)ST.nz.opts[el.dataset.nzo]=el.value;else if(el.id==='rl-name')ST.rl.name=el.value;else if(d.rk)rlSet(el)});
+W.addEventListener('change',e=>{const el=e.target,d=el.dataset;
+  if(d.k){const v=el.value;ST[d.k][+d.i][d.f]=d.f==='col'?+v:v;ST.res=null;if(d.f!=='value'&&d.f!=='color')ui()}
+  else if(el.dataset.rk){rlSet(el);if(['type','operator','scope','column'].includes(el.dataset.rf))ui()}
+  else if(el.id==='rl-logic')ST.rl.logic=el.value
+  else if(el.id==='nz-kind'){ST.nz.kind=el.value;ST.nz.res=null;ui()}
+  else if(el.id==='nz-mode')ST.nz.mode=el.value
+  else if(el.dataset.nzo!==undefined)ST.nz.opts[el.dataset.nzo]=el.value
+  else if(el.dataset.nzc!==undefined){const c=el.dataset.nzc;ST.nz.columns=el.checked?[...ST.nz.columns.filter(x=>x!==c),c]:ST.nz.columns.filter(x=>x!==c)}
+  else if(el.id==='fc-fn'){if(el.value){fcIns(el.value+'(');el.value=''}}
+  else if(el.dataset.optg)fcAct('toggle',el.dataset.optg)
+  else if(el.id==='nf')ppNum(el.value)
+  else if(el.id==='tsel')loadTable(+el.value,ST.tables[+el.value].header,false);
+  else if(el.id==='hdr')loadTable(ST.t,el.checked,true);
+  else if(d.col!==undefined){const c=+d.col;ST.cols=el.checked?[...ST.cols,c].sort((a,b)=>a-b):ST.cols.filter(x=>x!==c);ST.res=null}
+  else if(el.id==='mode'){ST.mode=el.value;ST.res=null;ui()}
+  else if(el.id==='me'){ST.me=el.checked;ST.res=null}
+  else if(el.id==='onlyhl'){ST.onlyHl=el.checked;ST.res=null}
+  else if(el.id==='fmt'){ST.fmt=el.value;ST.res=null}
+  else if(el.id==='mg-file'){if(el.files&&el.files[0])mgAddFile(el.files[0]);el.value=''}
+  else if(el.id==='mg-ta'){ST.mgTa=+el.value;ST.mgRes=null;ui()}
+  else if(el.id==='mg-tb'){ST.mgTb=+el.value;ST.mgRes=null;ui()}});
+W.addEventListener('click',e=>{const td=e.target.closest('td[data-r]');
+  if(td){const k=td.dataset.r+':'+td.dataset.c;ST.marks.has(k)?ST.marks.delete(k):ST.marks.add(k);td.classList.toggle('mkd');ST.res=null;const mc=$('#mc b');if(mc)mc.textContent=ST.marks.size;const rs=$('#res');if(rs)rs.remove();return}
+  const el=e.target.closest('button');if(!el)return;
+  if(el.id==='go'||el.id==='go2')run(el.id==='go2');
+  else if(el.id==='mg-analyze')mgAnalyze();
+  else if(el.dataset.ins!==undefined)fcIns(el.dataset.ins);
+  else if(el.id==='pp-report')ppReport();
+  else if(el.dataset.nzh!==undefined)nzHint(+el.dataset.nzh);
+  else if(el.id&&el.id.startsWith('nz-'))nzBtn(el.id);
+  else if(el.id&&el.id.startsWith('fc-'))fcBtn(el.id);
+  else if(el.id&&el.id.startsWith('rl-'))rlBtn(el.id);
+  else if(el.dataset.radd)rlAdd(el.dataset.radd);
+  else if(el.dataset.rrm){const [rk,ri]=el.dataset.rrm.split(':');rlDel(rk,+ri)}
+  else if(el.dataset.rledit)rlEdit(el.dataset.rledit);
+  else if(el.dataset.opedit)opEdit(el.dataset.opedit);
+  else if(el.dataset.opdel)fcAct('delete',el.dataset.opdel);
+  else if(el.dataset.opmv){const [oi,od]=el.dataset.opmv.split(':');fcAct(od==='-1'?'move_up':'move_down',oi)}
+  else if(el.id==='mclr'){ST.marks.clear();ST.res=null;ui()}
+  else if(el.dataset.pg)pageGrid(+el.dataset.pg);
+  else if(el.id==='ai')suggest();
+  else if(el.dataset.ap!==undefined)applySug(+el.dataset.ap);
+  else if(el.dataset.add){const k=el.dataset.add;ST[k].push(k==='sorts'?{col:-1,dir:'asc',type:'auto'}:{col:-1,op:'contains',value:'',color:PAL[ST[k].length%5],scope:'row'});ST.res=null;ui()}
+  else if(el.dataset.rm){ST[el.dataset.rm].splice(+el.dataset.i,1);ST.res=null;ui()}});
+function mkCard(){
+  const I=ST.info,G=ST.grid,C=I.columns;let g='<p class="hint">Đang tải dữ liệu…</p>';
+  if(G){const h=ST.hdr?1:0;
+    g=`<div class="tw" style="max-height:340px"><table class="gr"><tr><th>#</th>${C.map(c=>`<th>${esc(c.name)}</th>`).join('')}</tr>${G.rows.map((r,k)=>{const i=G.start+k;return`<tr><td class="rn">${i+1}</td>${r.map((v,c)=>`<td data-r="${i}" data-c="${c}"${ST.marks.has(i+':'+c)?' class="mkd"':''}>${esc(v)}</td>`).join('')}</tr>`}).join('')}</table></div>
+    <div class="rw" style="margin-top:8px"><button class="add" data-pg="-1"${G.start<=h?' disabled':''}>Trang trước</button><button class="add" data-pg="1"${G.start+G.rows.length>=G.total?' disabled':''}>Trang sau</button><span class="hint" style="margin:0">Dòng ${G.start+1} đến ${G.start+G.rows.length} trên ${G.total}</span></div>`}
+  return`<section class="card"><h2>Đánh dấu dữ liệu thiếu (tô đỏ)</h2><p class="sub">Bấm vào ô trong bảng để tô đỏ, bấm lần nữa để bỏ. Ô đỏ giữ nguyên màu trong file Excel xuất ra để đi báo cáo, kể cả sau khi sắp xếp hay lọc.</p>
+  <div class="rw"><label><input type="checkbox" id="me"${ST.me?' checked':''}> Tự động tô đỏ tất cả ô trống (${I.empty} ô)</label></div>${g}
+  <div class="rw" style="margin-top:8px"><span id="mc">Đã đánh dấu thủ công: <b>${ST.marks.size}</b> ô</span><button class="add" id="mclr">Bỏ hết đánh dấu</button></div></section>`}
+function bar(){const n=ST.marks.size;return`<div class="bar"><span>${n?`Đã đánh dấu <b>${n}</b> ô thủ công`:'Sẵn sàng xuất file'}${ST.me?', tự tô đỏ ô trống':''}</span><button class="go" id="go2">Xuất file ngay</button></div>`}
+const FUNCS=['IF','AND','OR','NOT','ISEMPTY','ISNUMBER','ISDATE','CONTAINS','STARTSWITH','ENDSWITH','ABS','ROUND','CEIL','FLOOR','MIN','MAX','SUM','AVERAGE','POWER','SQRT','CONCAT','LEFT','RIGHT','MID','LEN','TRIM','LOWER','UPPER','REPLACE','SUBSTITUTE','YEAR','MONTH','DAY'];
+async function fapi(u,body){const o={method:'POST',headers:{'Content-Type':'application/json','X-Requested-With':'datadesk'},body:JSON.stringify(Object.assign({id:ST.id,table:ST.t,header:ST.hdr},body||{}))};
+  const r=await fetch(u,o);if(r.status===401){location='/login';throw new Error('Phiên đăng nhập đã hết hạn.')}
+  try{const d=await r.json();if(d&&d.success===undefined&&d.error)return{success:false,errors:[{code:'SERVER',message:d.error}]};return d}catch(e){return{success:false,errors:[{code:'SERVER',message:'Lỗi máy chủ ('+r.status+')'}]}}}
+async function loadOps(){try{const r=await api(`/api/transform/state?id=${ST.id}&t=${ST.t}`);ST.ops=r.data;ui()}catch(e){}}
+function fcBlank(){ST.fc={op_id:null,target:'',expr:'',res:null,ai:'',note:''};rlBlank();nzBlank()}
+async function afterChange(){fcBlank();await loadTable(ST.t,true,false)}
+function fcIns(t){const el=$('#fc-e');if(!el)return;const a=el.selectionStart,b=el.selectionEnd;el.value=el.value.slice(0,a)+t+el.value.slice(b);ST.fc.expr=el.value;const p=a+t.length;el.focus();el.setSelectionRange(p,p)}
+async function fcBtn(id){
+  const body={target:ST.fc.target,expression:ST.fc.expr,op_id:ST.fc.op_id};
+  if(id==='fc-prev'){ST.fc.res=await fapi('/api/formula/preview',body);ui()}
+  else if(id==='fc-apply'){const r=await fapi('/api/formula/apply',body);if(r.success)await afterChange();else{ST.fc.res=r;ui()}}
+  else if(id==='fc-ask'){const r=await fapi('/api/formula/suggest',{description:ST.fc.ai||''});
+    if(r.success){ST.fc.target=r.data.target;ST.fc.expr=r.data.expression;ST.fc.note=r.data.explanation;ST.fc.res=r.data.valid?null:{success:false,errors:r.data.errors}}
+    else ST.fc.res={success:false,errors:r.errors||[{message:r.error||'AI chưa trả lời được.'}]};ui()}
+  else if(id==='fc-cancel'){fcBlank();ui()}
+  else if(id==='fc-undo'||id==='fc-redo'){const r=await fapi('/api/transform/'+id.slice(3));if(r.success)await afterChange();else{ST.fc.res=r;ui()}}}
+function fcEdit(id){const o=ST.ops.list.find(x=>x.id===id);if(!o)return;ST.fc={op_id:id,target:o.target,expr:o.expression,res:null};ui();const e=$('#fc-e');if(e)e.scrollIntoView({behavior:'smooth',block:'center'})}
+async function fcAct(action,id){const r=await fapi('/api/transform/update',{action,op_id:id});if(r.success)await afterChange();else{ST.fc.res=r;ui()}}
+function fcRes(){const r=ST.fc.res;if(!r)return'';let h='<div style="margin-top:12px">';
+  if(!r.success)h+=r.errors.map(e=>`<p class="hint" style="color:var(--bad)">✗ ${esc(e.message)}</p>`).join('');
+  else{h+='<p class="hint" style="color:var(--ok);font-weight:500">✓ Công thức hợp lệ.</p>';
+    const ec=(r.data&&r.data.error_counts)||{},ke=Object.keys(ec);
+    if(ke.length)h+=`<p class="hint" style="color:var(--bad)">⚠ ${ke.map(k=>ec[k]+' ô '+k).join(', ')}. Ô lỗi hiện mã lỗi, không bị tính thành 0.</p>`;
+    h+=(r.warnings||[]).map(w=>`<p class="hint">⚠ ${esc(w)}</p>`).join('');
+    if(r.data&&r.data.columns)h+=`<div class="tw"><table><tr>${r.data.columns.map(c=>`<th>${esc(c)}</th>`).join('')}</tr>${r.data.rows.map(row=>'<tr>'+row.map(v=>`<td>${esc(v)}</td>`).join('')+'</tr>').join('')}</table></div>`}
+  return h+'</div>'}
+function fcCard(){
+  const I=ST.info,O=ST.ops,F=ST.fc,names=I.columns.map(c=>c.name),has=O&&O.list.length;
+  let h=`<section class="card"><h2>Thêm công thức (tạo cột mới)</h2><p class="sub">Tạo cột mới từ các cột có sẵn, ví dụ <code>[Số lượng] * [Đơn giá]</code>. Dữ liệu gốc không bị sửa: cột mới chỉ nằm trong kết quả. Công thức dùng được các cột có sẵn ở các bước phía trên trong Quy trình biến đổi. Thay đổi quy trình sẽ đặt lại các quy tắc sắp xếp, tô màu, lọc và đánh dấu.</p>`;
+  if(!ST.hdr&&!has)return h+'<p class="hint">Công thức cần dòng tiêu đề để gọi tên cột: hãy bật "Dòng đầu tiên là tiêu đề" ở phần rà soát.</p></section>';
+  if(CFG.ai)h+=`<label class="f">Mô tả bằng tiếng Việt để AI gợi ý công thức (bạn vẫn phải xem trước và bấm áp dụng)<textarea id="fc-ai" rows="2" style="font:inherit;width:100%;border:1px solid var(--line);border-radius:6px;padding:7px 9px" placeholder="Ví dụ: thành tiền bằng số lượng nhân đơn giá, giảm 10% nếu số lượng trên 100">${esc(F.ai||'')}</textarea></label><div class="rw" style="margin:6px 0 10px"><button class="add" id="fc-ask">AI gợi ý công thức</button></div>${F.note?`<p class="hint">AI giải thích: ${esc(F.note)}</p>`:''}`;
+  h+=`<h3>${F.op_id?'Sửa công thức':'Công thức mới'}</h3><label class="f">Tên cột mới<input id="fc-t" value="${esc(F.target)}" placeholder="Thành tiền"></label>
+  <label class="f" style="margin-top:8px">Công thức (nâng cao: gõ trực tiếp, hoặc bấm chèn bên dưới)<textarea id="fc-e" rows="2" style="font:inherit;width:100%;border:1px solid var(--line);border-radius:6px;padding:7px 9px" placeholder="[Số lượng] * [Đơn giá]">${esc(F.expr)}</textarea></label>
+  <p class="hint">Bấm để chèn cột:</p><div class="chips">${names.map(n=>`<button class="chip" data-ins="${esc('['+n+']')}">${esc(n)}</button>`).join('')}</div>
+  <div class="chips">${['+','-','*','/','%','(',')',',','&','=','<>','>','<','>=','<='].map(o=>`<button class="chip" data-ins="${esc(o===','?', ':' '+o+' ')}">${esc(o)}</button>`).join('')}<select id="fc-fn"><option value="">Chèn hàm…</option>${FUNCS.map(f=>`<option>${f}</option>`).join('')}</select></div>
+  <div class="rw"><button class="add" id="fc-prev">Xem trước</button><button class="go" id="fc-apply" style="padding:8px 18px">${F.op_id?'Lưu thay đổi':'Thêm vào quy trình'}</button>${F.op_id?'<button class="add" id="fc-cancel">Hủy sửa</button>':''}</div>${fcRes()}</section>`;
+  return h}
+const OPSL=[['=','bằng'],['!=','khác'],['>','lớn hơn'],['<','nhỏ hơn'],['>=','lớn hơn hoặc bằng'],['<=','nhỏ hơn hoặc bằng'],['contains','chứa'],['starts_with','bắt đầu bằng'],['ends_with','kết thúc bằng'],['is_empty','để trống'],['is_not_empty','không trống'],['is_duplicate','bị trùng'],['is_unique','duy nhất'],['in','thuộc danh sách (cách nhau bằng ;)'],['not_in','không thuộc danh sách']];
+const NOVAL=['is_empty','is_not_empty','is_duplicate','is_unique'];
+const ACTL=[['set_value','Điền / ghi đè giá trị'],['clear','Xóa dữ liệu'],['replace','Thay thế chữ'],['color','Tô màu'],['mark','Đánh dấu'],['add_to_list','Đưa vào danh sách'],['append_last','Thêm vào cột cuối']];
+const EMPTYC={column:'',operator:'=',value:''};
+function rlNew(t,tg){return t==='color'?{type:t,color:'#FFB4B4',scope:'row',target:''}:t==='replace'?{type:t,target:tg||'',find:'',with:''}:t==='mark'?{type:t,target:'',value:''}:t==='add_to_list'?{type:t,target:'',value:''}:t==='append_last'?{type:t,value:''}:t==='clear'?{type:t,target:tg||''}:{type:'set_value',target:tg||'',value:'',value_type:'text'}}
+function rlBlank(){ST.rl={op_id:null,name:'',logic:'AND',when:[Object.assign({},EMPTYC)],then:[rlNew('set_value')],else:[],res:null}}
+function rlSet(el){const rk=el.dataset.rk,ri=+el.dataset.ri,rf=el.dataset.rf,L=ST.rl[rk];
+  if(rf==='type'&&rk!=='when')L[ri]=rlNew(el.value,L[ri].target);else L[ri][rf]=el.value}
+function rlAdd(k){if(k==='when')ST.rl.when.push(Object.assign({},EMPTYC));else ST.rl[k].push(rlNew('set_value'));ui()}
+function rlDel(k,i){ST.rl[k].splice(i,1);if(k==='when'&&!ST.rl.when.length)ST.rl.when.push(Object.assign({},EMPTYC));ui()}
+function rlEdit(id){const o=ST.ops.list.find(x=>x.id===id);if(!o)return;const cl=x=>JSON.parse(JSON.stringify(x||[]));
+  ST.rl={op_id:id,name:o.name||'',logic:(o.when&&o.when.logic)||'AND',when:cl(o.when&&o.when.items),then:cl(o.then),else:cl(o.else),res:null};ui();const e=$('#rl-name');if(e)e.scrollIntoView({behavior:'smooth',block:'center'})}
+function rlPayload(){return{rule:{name:ST.rl.name,when:{logic:ST.rl.logic,items:ST.rl.when},then:ST.rl.then,else:ST.rl.else},op_id:ST.rl.op_id}}
+async function rlBtn(id){
+  if(id==='rl-prev'){ST.rl.res=await fapi('/api/rule/preview',rlPayload());ui()}
+  else if(id==='rl-apply'||id==='rl-confirm'){const r=await fapi('/api/rule/apply',Object.assign(rlPayload(),{confirm:id==='rl-confirm'}));if(r.success)await afterChange();else{ST.rl.res=r;ui()}}
+  else if(id==='rl-cancel'){rlBlank();ui()}
+  else if(id==='rl-undo'||id==='rl-redo'){const r=await fapi('/api/transform/'+id.slice(3));if(r.success)await afterChange();else{ST.rl.res=r;ui()}}}
+function rlSum(o){const w=o.when||{},it=(w.items||[]).map(c=>`${c.column} ${(OPSL.find(x=>x[0]===c.operator)||[0,c.operator])[1]}${NOVAL.includes(c.operator)?'':' "'+c.value+'"'}`).join(w.logic==='OR'?' HOẶC ':' VÀ ');
+  const A=a=>({set_value:`điền "${a.value}" vào ${a.target||'?'}`,clear:`xóa ${a.target}`,replace:`thay "${a.find}" bằng "${a.with}" ở ${a.target}`,color:`tô màu ${a.scope==='cell'?'ô '+(a.target||''):'cả dòng'}`,mark:`đánh dấu "${a.value}"`,add_to_list:`đưa vào danh sách "${a.value}"`,append_last:`thêm "${a.value}" vào cột cuối`}[a.type]||a.type);
+  return `NẾU ${it} THÌ ${(o.then||[]).map(A).join(', ')}${(o.else||[]).length?' NGƯỢC LẠI '+o.else.map(A).join(', '):''}`}
+function rlCond(c,i){const d=`data-rk="when" data-ri="${i}"`;
+  return`<div class="rw"><select ${d} data-rf="column"><option value="">Chọn cột…</option>${ST.info.columns.map(x=>`<option${x.name===c.column?' selected':''}>${esc(x.name)}</option>`).join('')}</select><select ${d} data-rf="operator">${OPSL.map(o=>`<option value="${o[0]}"${o[0]===c.operator?' selected':''}>${o[1]}</option>`).join('')}</select><input ${d} data-rf="value" value="${esc(c.value||'')}" placeholder="Giá trị"${NOVAL.includes(c.operator)?' disabled':''}><button class="rm" data-rrm="when:${i}" aria-label="Xóa điều kiện">×</button></div>`}
+function rlAct(k,a,i){const d=`data-rk="${k}" data-ri="${i}"`,t=a.type;
+  const tg=ph=>`<input ${d} data-rf="target" list="rl-cols" value="${esc(a.target||'')}" placeholder="${ph}">`;
+  let x=`<div class="rw"><select ${d} data-rf="type">${ACTL.map(o=>`<option value="${o[0]}"${o[0]===t?' selected':''}>${o[1]}</option>`).join('')}</select>`;
+  if(t==='set_value')x+=tg('Cột đích (gõ tên mới để tạo cột)')+`<input ${d} data-rf="value" value="${esc(a.value||'')}" placeholder="Giá trị"><select ${d} data-rf="value_type"><option value="text"${a.value_type==='number'?'':' selected'}>Chữ</option><option value="number"${a.value_type==='number'?' selected':''}>Số</option></select>`;
+  else if(t==='clear')x+=tg('Cột cần xóa dữ liệu');
+  else if(t==='replace')x+=tg('Cột cần thay chữ')+`<input ${d} data-rf="find" value="${esc(a.find||'')}" placeholder="Chữ cần tìm"><input ${d} data-rf="with" value="${esc(a.with||'')}" placeholder="Thay bằng">`;
+  else if(t==='color')x+=`<input type="color" ${d} data-rf="color" value="${esc(a.color||'#FFB4B4')}" aria-label="Màu"><select ${d} data-rf="scope"><option value="row"${a.scope==='cell'?'':' selected'}>Tô cả dòng</option><option value="cell"${a.scope==='cell'?' selected':''}>Chỉ tô ô</option></select>`+(a.scope==='cell'?tg('Cột cần tô'):'');
+  else if(t==='append_last')x+=`<input ${d} data-rf="value" value="${esc(a.value||'')}" placeholder="Giá trị nối vào ô ở cột cuối">`;
+  else if(t==='add_to_list')x+=tg('Cột danh sách (mặc định: Danh sách)')+`<input ${d} data-rf="value" value="${esc(a.value||'')}" placeholder="Tên danh sách, ví dụ: Cần kiểm tra">`;
+  else x+=tg('Cột đánh dấu (mặc định: Đánh dấu)')+`<input ${d} data-rf="value" value="${esc(a.value||'')}" placeholder="Nhãn, ví dụ: Thiếu dữ liệu">`;
+  return x+`<button class="rm" data-rrm="${k}:${i}" aria-label="Xóa hành động">×</button></div>`}
+function rlRes(){const r=ST.rl.res;if(!r)return'';let h='<div style="margin-top:12px">';
+  if(!r.success){h+=r.errors.map(e=>`<p class="hint" style="color:var(--bad)">✗ ${esc(e.message)}</p>`).join('');
+    if(r.errors[0]&&r.errors[0].code==='NEEDS_CONFIRM')h+='<button class="go" id="rl-confirm" style="padding:8px 18px">Xác nhận ghi đè và áp dụng</button>';return h+'</div>'}
+  const d=r.data;h+=`<p class="hint" style="color:var(--ok);font-weight:500">✓ Quy tắc hợp lệ: khớp ${d.matched} dòng, thay đổi ${d.changed_cells} ô${d.colored_cells?', tô màu '+d.colored_cells+' ô':''}.</p>`;
+  if(d.new_columns&&d.new_columns.length)h+=`<p class="hint">⚠ Sẽ tạo cột mới: ${d.new_columns.map(esc).join(', ')}.</p>`;
+  if(d.overwritten)h+=`<p class="hint" style="color:var(--bad)">⚠ Sẽ ghi đè ${d.overwritten} ô đang có dữ liệu (chỉ trong kết quả, file gốc không đổi).</p>`;
+  const ke=Object.keys(d.errors||{});if(ke.length)h+=`<p class="hint" style="color:var(--bad)">⚠ ${ke.map(k=>d.errors[k]+' dòng '+k).join(', ')}: các dòng này không được coi là khớp, cần kiểm tra.</p>`;
+  h+=(r.warnings||[]).map(w=>`<p class="hint">⚠ ${esc(w)}</p>`).join('');
+  if(d.rows&&d.rows.length)h+=`<div class="tw"><table><tr><th>Dòng</th>${d.columns.map(c=>`<th>${esc(c)}</th>`).join('')}</tr>${d.rows.map(x=>`<tr><td>${x[0]}</td>${x.slice(1).map(v=>`<td>${esc(v)}</td>`).join('')}</tr>`).join('')}</table></div>`;
+  return h+'</div>'}
+function rlCard(){
+  if(!ST.rl)rlBlank();
+  const I=ST.info,O=ST.ops,R=ST.rl,has=O&&O.list.length;
+  let h=`<section class="card"><h2>Thêm quy tắc điều kiện (NẾU … THÌ …)</h2><p class="sub">Ví dụ: NẾU Điểm nhỏ hơn 5 THÌ điền "Yếu" vào cột Xếp loại và tô đỏ cả dòng. Quy tắc chạy theo thứ tự trong Quy trình biến đổi: quy tắc sau thấy kết quả của bước trước. Dữ liệu gốc không bị sửa: mọi thay đổi chỉ nằm trong kết quả, có xem trước và xác nhận khi ghi đè. Cột công thức không bị ghi đè.</p>`;
+  if(!ST.hdr&&!has)return h+'<p class="hint">Quy tắc cần dòng tiêu đề để gọi tên cột: hãy bật "Dòng đầu tiên là tiêu đề" ở phần rà soát.</p></section>';
+  h+=`<h3 style="margin-top:0">${R.op_id?'Sửa quy tắc':'Quy tắc mới'}</h3><label class="f">Tên quy tắc (tùy chọn)<input id="rl-name" value="${esc(R.name)}" placeholder="Xếp loại yếu"></label>
+  <div class="rw" style="margin-top:10px"><b style="color:var(--ink)">NẾU</b><select id="rl-logic"><option value="AND"${R.logic==='OR'?'':' selected'}>tất cả điều kiện đều đúng</option><option value="OR"${R.logic==='OR'?' selected':''}>một trong các điều kiện đúng</option></select></div>
+  ${R.when.map(rlCond).join('')}<button class="add" data-radd="when">+ Thêm điều kiện</button>
+  <div class="rw" style="margin-top:12px"><b style="color:var(--ink)">THÌ</b></div>${R.then.map((a,i)=>rlAct('then',a,i)).join('')}<button class="add" data-radd="then">+ Thêm hành động</button>
+  <div class="rw" style="margin-top:12px"><b style="color:var(--ink)">NGƯỢC LẠI</b><span class="hint" style="margin:0">(tùy chọn, khi điều kiện sai)</span></div>${R.else.map((a,i)=>rlAct('else',a,i)).join('')}<button class="add" data-radd="else">+ Thêm hành động</button>
+  <datalist id="rl-cols">${I.columns.map(c=>`<option value="${esc(c.name)}">`).join('')}</datalist>
+  <div class="rw" style="margin-top:12px"><button class="add" id="rl-prev">Xem trước</button><button class="go" id="rl-apply" style="padding:8px 18px">${R.op_id?'Lưu thay đổi':'Thêm vào quy trình'}</button>${R.op_id?'<button class="add" id="rl-cancel">Hủy sửa</button>':''}</div>${rlRes()}</section>`;
+  return h}
+function opEdit(id){const o=ST.ops.list.find(x=>x.id===id);if(!o)return;if(o.type==='CONDITIONAL')rlEdit(id);else if(o.type==='NORMALIZE')nzEdit(id);else fcEdit(id)}
+async function ppNum(v){const r=await fapi('/api/transform/settings',{numfmt:v});if(r.success)await afterChange();else{ST.fc.res=r;ui()}}
+async function ppReport(){try{const r=await api(`/api/validate/report?id=${ST.id}&t=${ST.t}`);ST.rep=r.data}catch(e){ST.rep={errors:[],total_errors:0,warnings:[e.message],audit:[]}}ui()}
+const STL={SAFE:['An toàn','var(--ok)'],REVIEW_REQUIRED:['Cần kiểm tra','var(--bad)'],OFF:['Đang tắt','var(--mute)']};
+function pipeCard(){
+  const O=ST.ops;if(!O)return'';const L=O.list;
+  let h=`<section class="card" id="pipe"><h2>Quy trình biến đổi</h2><p class="sub">Các bước chạy lần lượt từ trên xuống, bước sau thấy kết quả của bước trước. Đổi thứ tự bằng mũi tên. Sau các bước này là: đánh dấu và tô màu, lọc, sắp xếp, xuất file.</p>`;
+  if(!L.length)h+='<p class="hint">Chưa có bước nào. Thêm công thức hoặc quy tắc điều kiện ở các mục bên dưới.</p>';
+  else h+=L.map((o,i)=>{const s=o.stats||{},e=Object.entries(s.errors||{}),f=o.type==='CONDITIONAL',nzt=o.type==='NORMALIZE',st=STL[o.status]||STL.OFF;
+    const sum=nzt?nzSum(o):f?rlSum(o):`${o.target} = ${o.expression}`,info=o.enabled?nzt?(s.changed!=null?'Đổi '+s.changed+' ô'+(s.overwritten?', ghi đè '+s.overwritten:'')+(s.invalid?'; '+s.invalid+' ô không chuẩn hóa được':'')+(s.review?'; '+s.review+' ô chưa rõ định dạng':''):''):(f?(s.matched!=null?'Khớp '+s.matched+' dòng'+(s.overwritten?', ghi đè '+s.overwritten+' ô':''):''):(s.rows!=null?'Đã tính '+s.rows+' dòng':''))+(e.length?'; ⚠ '+e.map(x=>x[1]+' '+x[0]).join(', '):''):'';
+    return`<div class="sg"><div><label><input type="checkbox" data-optg="${o.id}"${o.enabled?' checked':''}> <b>Bước ${i+1}: ${nzt?'Chuẩn hóa':f?'Quy tắc':'Công thức'}${o.name?' "'+esc(o.name)+'"':''}</b></label><small>${esc(sum)}</small><small>${esc(info)} <b style="color:${st[1]}">${st[0]}</b></small></div><div class="rw" style="margin:0"><button class="add" data-opmv="${o.id}:-1"${i?'':' disabled'}>↑</button><button class="add" data-opmv="${o.id}:1"${i<L.length-1?'':' disabled'}>↓</button><button class="add" data-opedit="${o.id}">Sửa</button><button class="add" data-opdel="${o.id}">Xóa</button></div></div>${i<L.length-1?'<div style="text-align:center;color:var(--mute);margin:-2px 0 6px">↓</div>':''}`}).join('');
+  h+=`<div class="rw" style="margin-top:10px"><button class="add" id="fc-undo"${O.can_undo?'':' disabled'}>Hoàn tác</button><button class="add" id="fc-redo"${O.can_redo?'':' disabled'}>Làm lại</button><button class="add" id="pp-report">Báo cáo lỗi</button></div>
+  <label class="f" style="margin-top:8px">Cách đọc số dạng 1.234 hoặc 1,234 (có thể là 1234 hoặc 1,234)<select id="nf"><option value="auto"${O.numfmt==='auto'?' selected':''}>Tự nhận từ các ô khác; không đủ bằng chứng thì không tự chuyển</option><option value="vi"${O.numfmt==='vi'?' selected':''}>Kiểu Việt Nam: 1.234 là 1234, 1,234 là 1,234</option><option value="en"${O.numfmt==='en'?' selected':''}>Kiểu quốc tế: 1,234 là 1234, 1.234 là 1,234</option></select></label>`;
+  (O.warnings||[]).forEach(w=>{h+=`<p class="hint">⚠ ${esc(w)}</p>`});
+  if(ST.rep){const R=ST.rep;h+=`<h3>Báo cáo lỗi (${R.total_errors} ô hoặc dòng)</h3>`;
+    if(R.errors.length)h+=`<div class="tw"><table><tr><th>Loại lỗi</th><th>Dòng</th><th>Cột hoặc bước</th><th>Giá trị gốc</th><th>Gợi ý sửa</th></tr>${R.errors.slice(0,30).map(e=>`<tr><td>${esc(e.type)}</td><td>${e.row}</td><td>${esc(e.column)}</td><td>${esc(e.value)}</td><td>${esc(e.fix)}</td></tr>`).join('')}</table></div><p class="hint"><a href="/api/validate/report?id=${ST.id}&t=${ST.t}&format=csv" style="color:var(--acc)">Tải báo cáo lỗi đầy đủ (CSV)</a></p>`;
+    else h+='<p class="hint">Chưa có ô hoặc dòng lỗi nào.</p>';
+    if(R.audit&&R.audit.length)h+=`<h3>Lịch sử thao tác</h3><div class="tw"><table><tr><th>Thời gian</th><th>Thao tác</th><th>Nội dung</th><th>Dòng ảnh hưởng</th><th>Quyết định</th></tr>${R.audit.slice(0,10).map(a=>`<tr><td>${esc(a.time)}</td><td>${esc(a.action)}</td><td>${esc(a.detail||'')}</td><td>${a.affected_rows==null?'':a.affected_rows}</td><td>${esc(a.decision)}</td></tr>`).join('')}</table></div>`}
+  return h+'</section>'}
+const NZK=[['text','Chữ và khoảng trắng (họ tên, địa chỉ...)'],['null','Ô trống giả (N/A, -, null...)'],['phone','Số điện thoại'],['email','Email'],['number','Số và tiền (1.234,5; 1.000₫; VND)'],['percentage','Phần trăm'],['date','Ngày']];
+const NZV={text:'chữ và khoảng trắng',null:'ô trống giả',phone:'số điện thoại',email:'email',number:'số và tiền',percentage:'phần trăm',date:'ngày'};
+function nzSum(o){return `${NZV[o.kind]||o.kind}: cột ${(o.columns||[]).join(', ')}${o.mode==='new_column'?' (tạo cột mới)':' (ghi đè trong kết quả)'}`}
+function nzBlank(){ST.nz={op_id:null,name:'',kind:'text',columns:[],mode:'replace',opts:{case:'none',accents:'keep',format:'vn',order:'auto',tokens:''},res:null}}
+function nzPayload(){const n=ST.nz,o=n.opts;let opts={};
+  if(n.kind==='text')opts={case:o.case,accents:o.accents};else if(n.kind==='phone')opts={format:o.format};else if(n.kind==='date')opts={order:o.order};else if(n.kind==='null')opts={tokens:o.tokens};
+  return{norm:{name:n.name,kind:n.kind,columns:n.columns,mode:n.mode,options:opts},op_id:n.op_id}}
+function nzHint(i){const x=ST.info.hints[i];if(!x)return;nzBlank();ST.nz.kind=x.kind;ST.nz.columns=[x.name];ui();const e=$('#nz-kind');if(e)e.scrollIntoView({behavior:'smooth',block:'center'})}
+function nzEdit(id){const o=ST.ops.list.find(x=>x.id===id);if(!o)return;const op=o.options||{};
+  ST.nz={op_id:id,name:o.name||'',kind:o.kind,columns:[...(o.columns||[])],mode:o.mode||'replace',opts:{case:op.case||'none',accents:op.accents||'keep',format:op.format||'vn',order:op.order||'auto',tokens:Array.isArray(op.tokens)?op.tokens.join(', '):(op.tokens||'')},res:null};ui();const e=$('#nz-kind');if(e)e.scrollIntoView({behavior:'smooth',block:'center'})}
+async function nzBtn(id){
+  if(id==='nz-prev'){ST.nz.res=await fapi('/api/normalize/preview',nzPayload());ui()}
+  else if(id==='nz-apply'||id==='nz-confirm'){const r=await fapi('/api/normalize/apply',Object.assign(nzPayload(),{confirm:id==='nz-confirm'}));if(r.success)await afterChange();else{ST.nz.res=r;ui()}}
+  else if(id==='nz-cancel'){nzBlank();ui()}}
+function nzRes(){const r=ST.nz.res;if(!r)return'';let h='<div style="margin-top:12px">';
+  if(!r.success){h+=r.errors.map(e=>`<p class="hint" style="color:var(--bad)">✗ ${esc(e.message)}</p>`).join('');
+    if(r.errors[0]&&r.errors[0].code==='NEEDS_CONFIRM')h+='<button class="go" id="nz-confirm" style="padding:8px 18px">Xác nhận ghi đè và áp dụng</button>';return h+'</div>'}
+  const d=r.data;h+=`<p class="hint" style="color:var(--ok);font-weight:500">✓ Xem trước: đổi ${d.changed} ô, đã chuẩn sẵn ${d.unchanged} ô, ô trống ${d.empty}.</p>`;
+  if(d.invalid)h+=`<p class="hint" style="color:var(--bad)">⚠ ${d.invalid} ô không chuẩn hóa được, giữ nguyên.</p>`;
+  if(d.review)h+=`<p class="hint" style="color:var(--bad)">⚠ ${d.review} ô chưa rõ định dạng nên CHƯA đổi, cần bạn kiểm tra.</p>`;
+  if(d.new_columns&&d.new_columns.length)h+=`<p class="hint">⚠ Sẽ tạo cột mới: ${d.new_columns.map(esc).join(', ')}.</p>`;
+  if(d.overwritten)h+=`<p class="hint" style="color:var(--bad)">⚠ Sẽ ghi đè ${d.overwritten} ô đang có dữ liệu (chỉ trong kết quả, file gốc không đổi).</p>`;
+  h+=(r.warnings||[]).map(w=>`<p class="hint">⚠ ${esc(w)}</p>`).join('');
+  if(d.rows&&d.rows.length)h+=`<div class="tw"><table><tr><th>Dòng</th>${d.columns.map(c=>`<th>${esc(c)}</th>`).join('')}</tr>${d.rows.map(x=>`<tr><td>${x[0]}</td>${x.slice(1).map(v=>`<td>${esc(v)}</td>`).join('')}</tr>`).join('')}</table></div>`;
+  if(d.problems&&d.problems.length)h+=`<h3>Ô cần kiểm tra</h3><div class="tw"><table><tr><th>Dòng</th><th>Giá trị</th><th>Gợi ý sửa</th></tr>${d.problems.map(p=>`<tr><td>${p.row}</td><td>${esc(p.inputs)}</td><td>${esc(p.fix)}</td></tr>`).join('')}</table></div>`;
+  return h+'</div>'}
+function nzCard(){
+  if(!ST.nz)nzBlank();
+  const I=ST.info,O=ST.ops,N=ST.nz,o=N.opts,has=O&&O.list.length,sel=(id,arr,v,extra)=>`<select ${extra}>${arr.map(a=>`<option value="${a[0]}"${v===a[0]?' selected':''}>${a[1]}</option>`).join('')}</select>`;
+  let h=`<section class="card"><h2>Làm sạch và chuẩn hóa dữ liệu</h2><p class="sub">Đưa dữ liệu về một dạng thống nhất: bỏ khoảng trắng thừa, sửa lỗi Unicode, chuẩn hóa số điện thoại, email, số, tiền, phần trăm, ngày. Ô nào không đủ chắc chắn (ví dụ 1.234 hoặc 05/03/2026) sẽ KHÔNG bị tự đổi mà được báo để bạn kiểm tra. File gốc không bị sửa; có xem trước và xác nhận khi ghi đè.</p>`;
+  if(!ST.hdr&&!has)return h+'<p class="hint">Chuẩn hóa cần dòng tiêu đề để gọi tên cột: hãy bật "Dòng đầu tiên là tiêu đề" ở phần rà soát.</p></section>';
+  const hs=I.hints||[];
+  if(hs.length)h+=`<p class="hint">Gợi ý theo dữ liệu của bạn (bấm để điền sẵn vào biểu mẫu):</p><div class="chips">${hs.map((x,i)=>`<button class="chip" data-nzh="${i}">${esc(x.name)}: ${esc(x.reason)}</button>`).join('')}</div>`;
+  h+=`<h3>${N.op_id?'Sửa bước chuẩn hóa':'Bước chuẩn hóa mới'}</h3><label class="f">Loại chuẩn hóa<select id="nz-kind">${NZK.map(k=>`<option value="${k[0]}"${N.kind===k[0]?' selected':''}>${k[1]}</option>`).join('')}</select></label>
+  <p class="hint" style="margin-top:10px">Chọn cột cần chuẩn hóa:</p><div class="chips">${I.columns.map(c=>`<label><input type="checkbox" data-nzc="${esc(c.name)}"${N.columns.includes(c.name)?' checked':''}> ${esc(c.name)}</label>`).join('')}</div>`;
+  if(N.kind==='text')h+=`<div class="rw">${sel('',[['none','Giữ nguyên chữ hoa thường'],['lower','chữ thường'],['upper','CHỮ HOA'],['title','Viết Hoa Chữ Cái Đầu Mỗi Từ']],o.case,'data-nzo="case"')}${sel('',[['keep','Giữ dấu tiếng Việt'],['strip','Bỏ dấu tiếng Việt (đ thành d)']],o.accents,'data-nzo="accents"')}</div>`;
+  else if(N.kind==='phone')h+=`<div class="rw">${sel('',[['vn','Dạng 0912345678'],['e164','Dạng +84912345678']],o.format,'data-nzo="format"')}</div>`;
+  else if(N.kind==='date')h+=`<div class="rw">${sel('',[['auto','Tự nhận thứ tự (không đủ bằng chứng thì không tự đổi)'],['dmy','Ngày/tháng/năm'],['mdy','Tháng/ngày/năm']],o.order,'data-nzo="order"')}</div>`;
+  else if(N.kind==='null')h+=`<label class="f">Giá trị coi là trống, cách nhau bằng dấu phẩy (để trống: dùng danh sách mặc định)<input data-nzo="tokens" value="${esc(o.tokens||'')}" placeholder="N/A, na, null, none, -, --"></label>`;
+  else if(N.kind==='number'||N.kind==='percentage')h+=`<p class="hint">Số dạng 1.234 hoặc 1,234 mơ hồ: dùng mục "Cách đọc số" trong Quy trình biến đổi để chọn cách đọc.</p>`;
+  h+=`<div class="rw" style="margin-top:8px">${sel('',[['replace','Ghi đè trong kết quả (cần xác nhận khi đổi ô có dữ liệu)'],['new_column','Tạo cột mới "<tên cột> (chuẩn hóa)", giữ nguyên cột gốc']],N.mode,'id="nz-mode"')}</div>
+  <label class="f" style="margin-top:8px">Tên bước (tùy chọn)<input id="nz-name" value="${esc(N.name)}" placeholder="Chuẩn hóa số điện thoại"></label>
+  <div class="rw" style="margin-top:12px"><button class="add" id="nz-prev">Xem trước</button><button class="go" id="nz-apply" style="padding:8px 18px">${N.op_id?'Lưu thay đổi':'Thêm vào quy trình'}</button>${N.op_id?'<button class="add" id="nz-cancel">Hủy sửa</button>':''}</div>${nzRes()}</section>`;
+  return h}
+function mergeCard(){
+  let h=`<section class="card"><h2>Gộp file & So khớp cột thông minh (Giai đoạn 5)</h2>
+  <p class="sub">Tải thêm file dữ liệu vào phiên để phân tích cấu trúc, nhận diện khóa chính/khóa kép và so khớp cột thông minh (Mục 11 đến 18 của lộ trình).</p>
+  <div class="rw" style="align-items:center;gap:10px">
+    <label class="btn" style="cursor:pointer;background:var(--card);border:1px solid var(--border);padding:6px 12px;border-radius:6px;font-weight:500">+ Tải thêm file vào phiên
+      <input type="file" id="mg-file" style="display:none" accept=".xlsx,.xlsm,.csv,.tsv,.txt,.json,.docx,.pdf">
+    </label>
+    <span class="hint" style="margin:0">${ST.tables.length>1?`Đang có ${ST.tables.length} bảng dữ liệu trong phiên.`:'Hiện mới có 1 bảng. Hãy tải thêm file hoặc sheet thứ 2 để so khớp.'}</span>
+  </div>`;
+  if(ST.tables.length>1){
+    const ta=ST.mgTa!==undefined?ST.mgTa:0, tb=ST.mgTb!==undefined?ST.mgTb:1;
+    h+=`<div class="rw" style="margin-top:12px;gap:10px;align-items:center">
+      <div><b>Bảng A:</b> <select id="mg-ta">${ST.tables.map((t,i)=>`<option value="${i}"${i===ta?' selected':''}>${esc(t.name)}</option>`).join('')}</select></div>
+      <div><b>Bảng B:</b> <select id="mg-tb">${ST.tables.map((t,i)=>`<option value="${i}"${i===tb?' selected':''}>${esc(t.name)}</option>`).join('')}</select></div>
+      <button class="add" id="mg-analyze" style="margin:0">🔍 Phân tích & So khớp cột</button>
+    </div>`;
+    if(ST.mgRes){
+      const M=ST.mgRes, rec=M.recommendation||{};
+      const recVn={UNION:'Gộp dòng (Append / Union)',JOIN:'Ghép theo khóa (Join / Match)',REVIEW_REQUIRED:'Cần xem xét'};
+      h+=`<div style="margin-top:14px;padding:12px;border-radius:8px;background:var(--bg,#f8fafc);border:1px solid var(--border)">
+        <p style="margin:0 0 6px"><b>Đề xuất chế độ:</b> <span class="tag" style="background:#e0f2fe;color:#0369a1;padding:2px 8px;border-radius:4px;font-weight:600">${recVn[rec.mode]||rec.mode}</span> — ${esc(rec.reason||'')}</p>
+        <div style="display:flex;gap:20px;flex-wrap:wrap;margin-top:8px">
+          <div style="flex:1;min-width:240px">
+            <b>Khóa ứng viên (Bảng A):</b>
+            ${M.schema_a.key_candidates.length?`<ul style="margin:4px 0;padding-left:18px">${M.schema_a.key_candidates.slice(0,3).map(k=>`<li><b>${esc(k.column_name)}</b> (điểm ${(k.score*100).toFixed(0)}%${k.is_perfect_key?', duy nhất 100%':''})</li>`).join('')}</ul>`:'<p class="hint" style="margin:4px 0">Không tìm thấy khóa đơn đạt chuẩn.</p>'}
+            ${M.schema_a.composite_key_candidates.length?`<p style="margin:4px 0;font-size:12px;color:var(--sub)">Khóa kép đề xuất: ${M.schema_a.composite_key_candidates.map(k=>esc(k.column_names.join(' + '))).join('; ')}</p>`:''}
+          </div>
+          <div style="flex:1;min-width:240px">
+            <b>Khóa ứng viên (Bảng B):</b>
+            ${M.schema_b.key_candidates.length?`<ul style="margin:4px 0;padding-left:18px">${M.schema_b.key_candidates.slice(0,3).map(k=>`<li><b>${esc(k.column_name)}</b> (điểm ${(k.score*100).toFixed(0)}%${k.is_perfect_key?', duy nhất 100%':''})</li>`).join('')}</ul>`:'<p class="hint" style="margin:4px 0">Không tìm thấy khóa đơn đạt chuẩn.</p>'}
+            ${M.schema_b.composite_key_candidates.length?`<p style="margin:4px 0;font-size:12px;color:var(--sub)">Khóa kép đề xuất: ${M.schema_b.composite_key_candidates.map(k=>esc(k.column_names.join(' + '))).join('; ')}</p>`:''}
+          </div>
+        </div>
+        <div class="tw" style="margin-top:12px">
+          <table>
+            <tr><th>Cột Bảng A</th><th>Cột Bảng B</th><th>Độ tương đồng</th><th>Trạng thái</th><th>Lý do & Chi tiết</th></tr>
+            ${M.matching.mappings.map(m=>`<tr>
+              <td><b>${esc(m.source_name)}</b></td>
+              <td><b>${esc(m.target_name)}</b></td>
+              <td>${(m.score*100).toFixed(0)}%</td>
+              <td><span class="tag" style="background:${m.status==='SAFE'?'#dcfce7':'#fef9c3'};color:${m.status==='SAFE'?'#15803d':'#a16207'};padding:2px 6px;border-radius:4px;font-size:12px;font-weight:600">${m.status==='SAFE'?'An toàn':'Cần duyệt'}</span></td>
+              <td><small>${esc(m.reason)}</small></td>
+            </tr>`).join('')}
+          </table>
+        </div>
+        ${M.matching.unmatched_sources.length||M.matching.unmatched_targets.length?`
+          <p class="hint" style="margin-top:8px">
+            ${M.matching.unmatched_sources.length?`Cột Bảng A chưa ghép: ${M.matching.unmatched_sources.map(c=>esc(c.name)).join(', ')}. `:''}
+            ${M.matching.unmatched_targets.length?`Cột Bảng B chưa ghép: ${M.matching.unmatched_targets.map(c=>esc(c.name)).join(', ')}.`:''}
+          </p>
+        `:''}
+      </div>`;
+    }
+  }
+  h+='</section>';
+  return h;
+}
+async function mgAnalyze(){
+  const b=$('#mg-analyze');if(b){b.disabled=true;b.textContent='Đang phân tích…'}
+  const ta=+($('#mg-ta').value||0), tb=+($('#mg-tb').value||1);
+  ST.mgTa=ta;ST.mgTb=tb;
+  try{
+    const res=await fapi('/api/merge/analyze',{table_a:ta,table_b:tb});
+    if(res.success){ST.mgRes=res.data}
+    else alert((res.errors&&res.errors[0]&&res.errors[0].message)||'Lỗi phân tích');
+  }catch(e){alert(e.message)}
+  ui();
+}
+async function mgAddFile(f){
+  const fd=new FormData();fd.append('id',ST.id);fd.append('file',f);
+  try{
+    const r=await fetch('/api/merge/add_file',{method:'POST',headers:{'X-Requested-With':'datadesk'},body:fd}).then(x=>x.json());
+    if(r.error)alert(r.error);
+    else{ST.tables=r.tables;ST.mgRes=null;ui()}
+  }catch(e){alert(e.message)}
+}
+let CFG={ai:false,engine:'Python'};
+async function suggest(){
+  if(!CFG.ai||!ST)return;
+  ST.sug='loading';ui();
+  try{const d=await api('/api/suggest',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:ST.id,table:ST.t,header:ST.hdr})});ST.sug=d.suggestions}
+  catch(e){ST.sug={error:e.message}}
+  ui()}
+function sug(){
+  if(!CFG.ai)return'';const s=ST.sug;let b='';
+  if(s==='loading')b='<p class="hint">AI đang phân tích dữ liệu của bạn…</p>';
+  else if(s&&s.error)b=`<p class="hint" style="color:var(--bad)">${esc(s.error)}</p>`;
+  else if(Array.isArray(s))b=s.length?s.map((x,i)=>`<div class="sg"><div><b>${esc(x.title)}</b><small>${esc(x.reason)}</small></div><button class="add" data-ap="${i}">Áp dụng</button></div>`).join(''):'<p class="hint">AI chưa có gợi ý phù hợp với dữ liệu này.</p>';
+  return `<section class="card"><h2>Gợi ý từ AI</h2><p class="sub">AI chỉ nhận tên cột, kiểu dữ liệu và vài dòng mẫu để đề xuất tùy chọn, không chỉnh sửa dữ liệu. Việc xử lý thật do bộ xử lý ${esc(CFG.engine)} thực hiện và được kiểm tra lại.</p>${b}<button class="add" id="ai" style="margin-top:6px"${s==='loading'?' disabled':''}>Gợi ý lại</button></section>`}
+function applySug(i){
+  const s=ST.sug[i];
+  ST.sorts=s.sorts.length?s.sorts.map(x=>({col:x.col,dir:x.dir,type:'auto'})):[{col:-1,dir:'asc',type:'auto'}];
+  ST.hls=s.highlights.map(r=>({col:r.col,op:r.op,value:r.value,scope:r.scope,color:r.color}));
+  ST.flts=s.filters.map(r=>({col:r.col,op:r.op,value:r.value}));
+  ST.res=null;ui();const c=document.querySelectorAll('#work .card')[2];if(c)c.scrollIntoView({behavior:'smooth',block:'start'})}
+api('/api/config').then(c=>{CFG=c;$('#eng').textContent='Bộ xử lý: '+c.engine+' | v'+c.version}).catch(()=>{});
+$('#out').onclick=()=>fetch('/api/logout',{method:'POST',headers:{'X-Requested-With':'datadesk'}}).finally(()=>{location='/login'});
+const dz=$('#drop');
+$('#file').addEventListener('change',e=>{if(e.target.files[0])upload(e.target.files[0]);e.target.value=''});
+['dragover','dragenter'].forEach(v=>dz.addEventListener(v,e=>{e.preventDefault();dz.classList.add('on')}));
+['dragleave','drop'].forEach(v=>dz.addEventListener(v,e=>{e.preventDefault();dz.classList.remove('on')}));
+dz.addEventListener('drop',e=>{const f=e.dataTransfer.files[0];if(f)upload(f)});
+</script></body></html>

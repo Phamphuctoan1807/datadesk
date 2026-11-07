@@ -1,0 +1,8 @@
+venv/
+.venv/
+handover/
+__pycache__/
+*.so
+*.dll
+*.dylib
+.env

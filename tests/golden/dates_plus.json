@@ -1,0 +1,2 @@
+{"dataset": "dates.csv", "ops": [{"id": "rule_001", "type": "FORMULA", "target": "Hạn", "expression": "[Ngày] + 30", "enabled": true}, {"id": "rule_002", "type": "FORMULA", "target": "Năm", "expression": "YEAR([Ngày])", "enabled": true}],
+ "expect": {"cells": [{"row": 2, "col": "Hạn", "value": "2026-03-02"}, {"row": 3, "col": "Hạn", "value": "2026-03-30"}, {"row": 4, "col": "Hạn", "value": "2024-03-30"}, {"row": 4, "col": "Năm", "value": 2024}, {"row": 6, "col": "Hạn", "value": "ERROR_NULL"}], "errors": {"rule_001": {"ERROR_NULL": 1, "ERROR_TYPE": 2}}}}

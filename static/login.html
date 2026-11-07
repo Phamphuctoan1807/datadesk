@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="vi"><head><meta charset="utf-8"><title>Đăng nhập · DataDesk</title>
+<meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex, nofollow">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;700&display=swap">
+<style>
+*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:#0f1b2d;color:#15202e;font:400 15px/1.5 "Be Vietnam Pro",system-ui,sans-serif;padding:16px}
+.c{background:#fff;border-radius:12px;padding:30px 28px;width:100%;max-width:380px}
+.logo{width:38px;height:38px;border-radius:9px;background:#2457f5;color:#fff;display:grid;place-items:center;font-weight:700;margin-bottom:14px}
+h1{font-size:21px;margin:0 0 4px}p{margin:0 0 18px;color:#5d6b7d;font-size:13.5px}
+.w{display:flex;gap:8px}input{flex:1;min-width:0;font:inherit;border:1px solid #d9e0e9;border-radius:8px;padding:11px 12px}
+.s{border:1px solid #d9e0e9;background:#fff;border-radius:8px;padding:0 12px;cursor:pointer;font:inherit;color:#5d6b7d}
+.go{width:100%;margin-top:12px;background:#2457f5;color:#fff;border:0;border-radius:8px;padding:12px;font:inherit;font-weight:700;cursor:pointer}
+.go:disabled{opacity:.6}.v{color:#5d6b7d;font-size:12px;margin:14px 0 0;text-align:center}#m{color:#b3261e;min-height:1.3em;margin:10px 0 0;font-size:13.5px}:focus-visible{outline:2px solid #2457f5;outline-offset:2px}
+[hidden]{display:none!important}
+.ov{position:fixed;inset:0;background:rgba(15,27,45,.9);display:grid;place-items:center;padding:16px;z-index:10}
+.md{background:#fff;border-radius:12px;padding:30px 28px;width:100%;max-width:380px;text-align:center}
+.md .logo{margin:0 auto 14px}.md h2{font-size:21px;margin:0 0 6px}.md p{margin:0 0 20px;font-size:16px;color:#15202e}
+</style></head><body>
+<div class="ov" id="ov" role="dialog" aria-modal="true" aria-labelledby="ot"><div class="md"><div class="logo">D</div>
+<h2 id="ot">Chào mừng bạn</h2><p>Đây là dự án của <b>Toàn Phạm</b>.</p><button class="go" id="ok" type="button">Đã hiểu, tiếp tục</button></div></div>
+<form class="c" id="f" hidden><div class="logo">D</div><h1>DataDesk</h1><p>Trang riêng tư. Nhập mật khẩu để tiếp tục.</p>
+<div class="w"><input id="p" type="password" autocomplete="current-password" placeholder="Mật khẩu" required><button type="button" class="s" id="t">Hiện</button></div>
+<button class="go" id="b">Đăng nhập</button><p id="m" role="alert"></p><p class="v" id="ver"></p></form>
+<script>
+const f=document.getElementById('f'),p=document.getElementById('p'),m=document.getElementById('m'),b=document.getElementById('b');
+fetch('/version').then(r=>r.json()).then(d=>{document.getElementById('ver').textContent='Phiên bản '+d.version}).catch(()=>{});
+const ov=document.getElementById('ov'),ok=document.getElementById('ok');
+function closeIntro(){ov.remove();f.hidden=false;p.focus()}
+ok.onclick=closeIntro;ok.focus();document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.getElementById('ov'))closeIntro()});
+document.getElementById('t').onclick=e=>{p.type=p.type==='password'?'text':'password';e.target.textContent=p.type==='password'?'Hiện':'Ẩn'};
+f.onsubmit=async e=>{e.preventDefault();b.disabled=true;m.textContent='';
+try{const r=await fetch('/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({password:p.value})});const d=await r.json();
+if(r.ok)location='/';else m.textContent=d.error||'Không đăng nhập được.'}catch(x){m.textContent='Không kết nối được máy chủ.'}b.disabled=false};
+</script></body></html>

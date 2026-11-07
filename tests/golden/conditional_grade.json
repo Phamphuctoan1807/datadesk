@@ -1,0 +1,4 @@
+{"dataset": "simple.csv", "ops": [{"id": "rule_001", "type": "CONDITIONAL", "enabled": true, "name": "xep loai", "when": {"logic": "AND", "items": [{"column": "Điểm", "operator": "<", "value": "5"}]},
+  "then": [{"type": "set_value", "target": "Xếp loại", "value": "Yếu", "value_type": "text"}, {"type": "color", "color": "#FFB4B4", "scope": "row"}], "else": [{"type": "set_value", "target": "Xếp loại", "value": "Đạt", "value_type": "text"}]}],
+ "expect": {"columns": ["Mã", "Tên", "Điểm", "Xếp loại"], "cells": [{"row": 2, "col": "Xếp loại", "value": "Yếu"}, {"row": 3, "col": "Xếp loại", "value": "Đạt"}, {"row": 6, "col": "Xếp loại", "value": "Yếu"}],
+  "fills": [{"row": 2, "col": 0, "color": "#FFB4B4"}, {"row": 3, "col": 0, "color": null}], "errors": {"rule_001": {}}}}

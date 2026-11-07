@@ -1,0 +1,3 @@
+{"dataset": "duplicate.csv", "ops": [{"id": "rule_001", "type": "CONDITIONAL", "enabled": true, "name": "trung ma", "when": {"logic": "AND", "items": [{"column": "Mã", "operator": "is_duplicate", "value": ""}]},
+  "then": [{"type": "add_to_list", "target": "", "value": "Trùng mã"}], "else": []}],
+ "expect": {"columns": ["Mã", "Tên", "Danh sách"], "cells": [{"row": 2, "col": "Danh sách", "value": "Trùng mã"}, {"row": 3, "col": "Danh sách", "value": "Trùng mã"}, {"row": 4, "col": "Danh sách", "value": "Trùng mã"}, {"row": 5, "col": "Danh sách", "value": ""}, {"row": 7, "col": "Danh sách", "value": ""}]}}

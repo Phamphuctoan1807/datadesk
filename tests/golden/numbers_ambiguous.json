@@ -1,0 +1,3 @@
+{"dataset": "numbers.csv", "ops": [{"id": "rule_001", "type": "FORMULA", "target": "A", "expression": "[Rõ] * 1", "enabled": true}, {"id": "rule_002", "type": "FORMULA", "target": "B", "expression": "[Mơ hồ] * 1", "enabled": true}],
+ "expect": {"cells": [{"row": 2, "col": "A", "value": 1234}, {"row": 3, "col": "A", "value": 2500}, {"row": 4, "col": "A", "value": 12.5}, {"row": 5, "col": "A", "value": 1234.5}, {"row": 2, "col": "B", "value": "ERROR_TYPE"}],
+  "warnings_contain": ["chưa rõ là 1234 hay 1,234"], "errors": {"rule_001": {}, "rule_002": {"ERROR_TYPE": 11}}}}

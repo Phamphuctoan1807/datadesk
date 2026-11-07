@@ -1,0 +1,50 @@
+{
+ "dataset": "numbers.csv",
+ "ops": [
+  {
+   "id": "rule_001",
+   "type": "NORMALIZE",
+   "enabled": true,
+   "name": "",
+   "kind": "number",
+   "columns": [
+    "Rõ",
+    "Mơ hồ"
+   ],
+   "mode": "replace",
+   "options": {}
+  }
+ ],
+ "expect": {
+  "cells": [
+   {
+    "row": 2,
+    "col": "Rõ",
+    "value": 1234
+   },
+   {
+    "row": 3,
+    "col": "Rõ",
+    "value": 2500
+   },
+   {
+    "row": 4,
+    "col": "Rõ",
+    "value": 12.5
+   },
+   {
+    "row": 2,
+    "col": "Mơ hồ",
+    "value": "1.234"
+   }
+  ],
+  "errors": {
+   "rule_001": {
+    "AMBIGUOUS_NUMBER": 11
+   }
+  },
+  "warnings_contain": [
+   "chưa rõ định dạng"
+  ]
+ }
+}

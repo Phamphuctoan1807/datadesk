@@ -1,0 +1,51 @@
+{
+ "dataset": "emails.csv",
+ "ops": [
+  {
+   "id": "rule_001",
+   "type": "NORMALIZE",
+   "enabled": true,
+   "name": "",
+   "kind": "email",
+   "columns": [
+    "Email"
+   ],
+   "mode": "new_column",
+   "options": {}
+  }
+ ],
+ "expect": {
+  "columns": [
+   "Tên",
+   "Email",
+   "Email (chuẩn hóa)"
+  ],
+  "cells": [
+   {
+    "row": 2,
+    "col": "Email (chuẩn hóa)",
+    "value": "an@mail.com"
+   },
+   {
+    "row": 2,
+    "col": "Email",
+    "value": " An@Mail.COM "
+   },
+   {
+    "row": 4,
+    "col": "Email (chuẩn hóa)",
+    "value": "bad"
+   },
+   {
+    "row": 6,
+    "col": "Email (chuẩn hóa)",
+    "value": "le.van@cong-ty.com.vn"
+   }
+  ],
+  "errors": {
+   "rule_001": {
+    "INVALID_EMAIL": 2
+   }
+  }
+ }
+}
