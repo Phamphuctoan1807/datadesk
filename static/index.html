@@ -545,6 +545,18 @@ async function upload(f){
   }
 }
 
+async function fetchQualityScore(){
+  try{
+    if(!ST||!ST.id)return;
+    const r = await api(`/api/quality/score?id=${ST.id}&table=${ST.t}`);
+    if(r && r.data && r.data.quality){
+      ST.quality = r.data.quality;
+    }
+  }catch(e){
+    ST.quality = null;
+  }
+}
+
 function setInfo(i,keep){
   ST.info=i;ST.hdr=i.header;ST.res=null;
   if(!keep||!ST.cols||ST.cols.length!==i.columns.length)ST.cols=i.columns.map((_,c)=>c);
@@ -552,6 +564,7 @@ function setInfo(i,keep){
   ui();
   loadGrid(i.header?1:0);
   loadOps();
+  fetchQualityScore().then(()=>ui());
   if(currentMode==='tech'){
     $('#tech-space').style.display='block';
     renderTechWorkspace();
@@ -592,12 +605,51 @@ function ui(){
   <div class="rw">${ST.tables.length>1?`<select id="tsel">${ST.tables.map((x,i)=>`<option value="${i}"${i===ST.t?' selected':''}>${esc(x.name)}</option>`).join('')}</select>`:''}
   <label class="chips" style="margin:0"><span><input type="checkbox" id="hdr"${ST.hdr?' checked':''}${ST.ops&&ST.ops.list.length?' disabled':''}> Dòng đầu tiên là tiêu đề cột</span></label></div>
   <div class="stats"><div><b>${I.n_rows}</b>dòng dữ liệu</div><div><b>${I.n_cols}</b>cột</div><div><b>${I.empty}</b>ô trống</div><div><b>${I.dup}</b>dòng trùng hoàn toàn</div></div>
+  <div id="quality-score-banner" style="margin-top:14px;padding:14px 18px;border-radius:10px;background:rgba(15,27,45,0.85);border:1px solid rgba(0,240,255,0.25);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:14px">
+    <div style="display:flex;align-items:center;gap:14px">
+      <div id="qs-gauge" style="width:54px;height:54px;border-radius:50%;border:3px solid var(--acc);display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;color:#fff;background:rgba(0,240,255,0.12)">
+        ${ST.quality ? ST.quality.overall_score : '--'}
+      </div>
+      <div>
+        <div style="font-weight:700;font-size:15px;color:#fff;display:flex;align-items:center;gap:8px">
+          Điểm chất lượng dữ liệu: <span id="qs-val" style="color:var(--acc)">${ST.quality ? (ST.quality.overall_score + '/100 (' + (ST.quality.status==='SAFE'?'An toàn':ST.quality.status==='REVIEW_REQUIRED'?'Cần rà soát':'Chưa an toàn') + ')') : 'Đang tính...'}</span>
+        </div>
+        <div id="qs-submetrics" style="font-size:12px;color:#94a3b8;display:flex;gap:14px;margin-top:4px">
+          <span>Đầy đủ: <b>${ST.quality ? ST.quality.metrics.completeness : '--'}%</b></span>
+          <span>Nhất quán: <b>${ST.quality ? ST.quality.metrics.consistency : '--'}%</b></span>
+          <span>Hợp lệ: <b>${ST.quality ? ST.quality.metrics.validity : '--'}%</b></span>
+          <span>Duy nhất: <b>${ST.quality ? ST.quality.metrics.uniqueness : '--'}%</b></span>
+        </div>
+      </div>
+    </div>
+    <button class="add" id="btn-toggle-qs-details" style="font-size:12px;padding:6px 14px">
+      ${ST.showQsDetails ? '▲ Thu gọn giải trình' : '▼ Xem giải trình chi tiết'}
+    </button>
+  </div>
+  ${ST.showQsDetails && ST.quality && ST.quality.deductions.length ? `
+  <div id="qs-details-panel" style="margin-top:8px;padding:12px;border-radius:8px;background:rgba(2,6,23,0.8);border:1px solid rgba(255,255,255,0.1)">
+    <h3 style="margin:0 0 8px;font-size:13.5px;color:#fbbf24">Chi tiết điểm trừ chất lượng (${ST.quality.deductions.length} vấn đề)</h3>
+    <div class="tw"><table>
+      <tr><th>Mục đánh giá</th><th>Cột / Phạm vi</th><th>Điểm trừ</th><th>Số ô/dòng</th><th>Nguyên nhân</th><th>Gợi ý khắc phục</th></tr>
+      ${ST.quality.deductions.map(d=>`<tr>
+        <td><b>${esc(d.category)}</b></td>
+        <td>${esc(d.column)}</td>
+        <td style="color:#f87171;font-weight:700">-${d.penalty}</td>
+        <td>${d.count}</td>
+        <td>${esc(d.reason)}</td>
+        <td style="color:#94a3b8"><small>${esc(d.fix)}</small></td>
+      </tr>`).join('')}
+    </table></div>
+  </div>` : ''}
+
   ${I.dropped?`<p class="hint">${I.dropped} dòng trống hoàn toàn trong file gốc sẽ không đưa vào kết quả.</p>`:''}
   ${I.colored?`<p class="hint">File gốc có ${I.colored} ô đã tô màu. Các màu này được giữ nguyên khi xuất Excel.</p>`:''}
   <div class="tw"><table><tr><th>Cột</th><th>Kiểu nhận diện</th><th>Ô trống</th><th>Giá trị khác nhau</th><th>Ví dụ</th></tr>${C.map(c=>`<tr><td>${esc(c.name)}</td><td>${TN[c.type]}</td><td>${c.empty}</td><td>${c.unique}</td><td>${esc(c.sample)}</td></tr>`).join('')}</table></div></section>`;
   h+=mergeCard();
   h+=pipeCard();
   h+=nzCard();
+  h+=cleanCard();
+  h+=businessRulesCard();
   h+=fcCard();
   h+=rlCard();
   h+=sug();
@@ -761,6 +813,26 @@ W.addEventListener('change',e=>{const el=e.target,d=el.dataset;
   else if(el.id==='mg-join-type'){ST.mgJoinType=el.value;ST.mgPreview=null}
   else if(el.id==='mg-conflict'){ST.mgConflict=el.value;ST.mgPreview=null}
   else if(el.id==='mg-key-a'){ST.keyA=el.value;ST.mgPreview=null}
+
+  else if(el.dataset.clnCol){
+    const c = el.dataset.clnCol;
+    if(el.checked){ if(!ST.clean.cols.includes(c)) ST.clean.cols.push(c); }
+    else { ST.clean.cols = ST.clean.cols.filter(x=>x!==c); }
+  }
+  else if(el.dataset.clnDupcol){
+    const c = el.dataset.clnDupcol;
+    if(el.checked){ if(!ST.clean.dup_cols.includes(c)) ST.clean.dup_cols.push(c); }
+    else { ST.clean.dup_cols = ST.clean.dup_cols.filter(x=>x!==c); }
+  }
+  else if(el.dataset.clnFmtcol){
+    const c = el.dataset.clnFmtcol;
+    if(el.checked){ if(!ST.clean.fmt_cols.includes(c)) ST.clean.fmt_cols.push(c); }
+    else { ST.clean.fmt_cols = ST.clean.fmt_cols.filter(x=>x!==c); }
+  }
+  else if(el.id==='clean-dup-mode'){
+    ST.clean.dup_mode = el.value; ui();
+  }
+
   else if(el.id==='mg-key-b'){ST.keyB=el.value;ST.mgPreview=null}});
 
 W.addEventListener('click',e=>{const td=e.target.closest('td[data-r]');
@@ -776,6 +848,166 @@ W.addEventListener('click',e=>{const td=e.target.closest('td[data-r]');
   else if(el.id&&el.id.startsWith('nz-'))nzBtn(el.id);
   else if(el.id&&el.id.startsWith('fc-'))fcBtn(el.id);
   else if(el.id&&el.id.startsWith('rl-'))rlBtn(el.id);
+
+  else if(el.id==='preset-save-btn'){
+    const name = prompt('Nhập tên mẫu quy trình (Preset):', 'Quy trình xử lý dữ liệu');
+    if(name && name.trim()){
+      const desc = prompt('Mô tả quy trình (tùy chọn):', '');
+      fapi('/api/preset/save', { id: ST.id, table: ST.t, name: name.trim(), description: (desc||'').trim() })
+        .then(r => {
+          if(r.success) alert('✓ Đã lưu mẫu "' + name + '" thành công!');
+          else alert('Lỗi: ' + (r.errors[0] ? r.errors[0].message : 'Không lưu được'));
+        });
+    }
+  }
+  else if(el.id==='preset-open-btn'){
+    loadPresetsList().then(() => { SHOW_PRESET_MODAL = true; renderPresetModal(); });
+  }
+  else if(el.id==='btn-toggle-qs-details'){
+    ST.showQsDetails = !ST.showQsDetails;
+    ui();
+  }
+
+  else if(el.id==='btn-validate-brules'){
+    if(!ST.bRules || !ST.bRules.length){
+      alert('Vui lòng thêm ít nhất 1 quy tắc trước khi kiểm tra!');
+      return;
+    }
+    fapi('/api/business_rules/validate', {
+      id: ST.id, table: ST.t, rules: ST.bRules
+    }).then(r => {
+      if(r.success){
+        ST.bRulesResult = r.data.validation_result;
+        ui();
+      } else {
+        alert('Lỗi kiểm tra quy tắc: ' + (r.errors[0]?r.errors[0].message:''));
+      }
+    });
+  }
+  else if(el.id==='btn-add-brule'){
+    const typ = $('#br-new-type').value;
+    const col = $('#br-new-col').value;
+    const op = $('#br-new-op').value;
+    const val = $('#br-new-val').value;
+    const tcol = $('#br-new-target-col').value;
+    if(!col){
+      alert('Vui lòng chọn cột cần kiểm tra!');
+      return;
+    }
+    const nameMap = {
+      compare: `${col} ${op} ${val}`,
+      compare_columns: `${col} ${op} ${tcol}`,
+      valid_email: `${col} phải là Email hợp lệ`,
+      valid_phone: `${col} phải là SĐT hợp lệ`,
+      not_empty: `${col} không được để trống`,
+      unique: `${col} không được trùng lặp`
+    };
+    ST.bRules.push({
+      id: "br_" + (ST.bRules.length + 1),
+      name: nameMap[typ] || `Quy tắc ${col}`,
+      type: typ,
+      column: col,
+      operator: op,
+      value: val,
+      target_column: tcol
+    });
+    ST.bRulesResult = null;
+    ui();
+  }
+  else if(el.dataset.bruleDel !== undefined){
+    ST.bRules.splice(+el.dataset.bruleDel, 1);
+    ST.bRulesResult = null;
+    ui();
+  }
+
+  else if(el.id==='clean-tab-fr'){ ST.clean.tab = 'fr'; ui(); }
+  else if(el.id==='clean-tab-dup'){ ST.clean.tab = 'dup'; ui(); }
+  else if(el.id==='clean-tab-fmt'){ ST.clean.tab = 'fmt'; ui(); }
+  else if(el.id==='clean-fr-prev'){
+    cleanBlank();
+    const find_val = $('#clean-fr-find').value;
+    const replace_val = $('#clean-fr-replace').value;
+    const match_type = document.querySelector('input[name="cln-match"]:checked').value;
+    const is_regex = $('#clean-fr-regex').checked;
+    const case_sensitive = $('#clean-fr-case').checked;
+    fapi('/api/clean/find_replace/preview', {
+      id: ST.id, table: ST.t, columns: ST.clean.cols,
+      find_val, replace_val, match_type, is_regex, case_sensitive
+    }).then(r => {
+      if(r.success){ ST.clean.preview = r.data; ui(); }
+      else alert('Lỗi: ' + (r.errors[0]?r.errors[0].message:''));
+    });
+  }
+  else if(el.id==='clean-fr-apply'){
+    cleanBlank();
+    const find_val = $('#clean-fr-find').value;
+    const replace_val = $('#clean-fr-replace').value;
+    const match_type = document.querySelector('input[name="cln-match"]:checked').value;
+    const is_regex = $('#clean-fr-regex').checked;
+    const case_sensitive = $('#clean-fr-case').checked;
+    const target_mode = $('#clean-fr-target').value;
+    fapi('/api/clean/find_replace/apply', {
+      id: ST.id, table: ST.t, columns: ST.clean.cols,
+      find_val, replace_val, match_type, is_regex, case_sensitive, target_mode
+    }).then(async r => {
+      if(r.success){
+        ST.clean.res = r.data;
+        if(target_mode==='new_table'){
+          alert('✓ Đã tạo bảng mới thành công: ' + r.data.name);
+          location.reload();
+        } else {
+          await afterChange();
+        }
+      } else alert('Lỗi: ' + (r.errors[0]?r.errors[0].message:''));
+    });
+  }
+  else if(el.id==='clean-dup-detect'){
+    cleanBlank();
+    const mode = $('#clean-dup-mode').value;
+    const threshInput = $('#clean-dup-thresh');
+    const threshold = threshInput ? (+threshInput.value / 100) : 0.85;
+    fapi('/api/clean/duplicates/detect', {
+      id: ST.id, table: ST.t, columns: ST.clean.dup_cols, mode, threshold
+    }).then(r => {
+      if(r.success){ ST.clean.dup_info = r.data; ui(); }
+      else alert('Lỗi: ' + (r.errors[0]?r.errors[0].message:''));
+    });
+  }
+  else if(el.id==='clean-dup-apply'){
+    cleanBlank();
+    const mode = $('#clean-dup-mode').value;
+    const threshInput = $('#clean-dup-thresh');
+    const threshold = threshInput ? (+threshInput.value / 100) : 0.85;
+    const strategy = $('#clean-dup-strategy').value;
+    const target_mode = $('#clean-dup-target').value;
+    fapi('/api/clean/duplicates/remove', {
+      id: ST.id, table: ST.t, columns: ST.clean.dup_cols, mode, strategy, threshold, target_mode
+    }).then(async r => {
+      if(r.success){
+        ST.clean.dup_res = r.data;
+        if(target_mode==='new_table'){
+          alert('✓ Đã tạo bảng mới sau lọc trùng: ' + r.data.name);
+          location.reload();
+        } else {
+          await afterChange();
+        }
+      } else alert('Lỗi: ' + (r.errors[0]?r.errors[0].message:''));
+    });
+  }
+  else if(el.id==='clean-fmt-apply'){
+    cleanBlank();
+    const kind = $('#clean-fmt-kind').value;
+    fapi('/api/clean/format/apply', {
+      id: ST.id, table: ST.t, columns: ST.clean.fmt_cols, kind,
+      options: ST.clean.fmt_opts, target_mode: 'in_place'
+    }).then(async r => {
+      if(r.success){
+        ST.clean.fmt_res = r.data;
+        await afterChange();
+      } else alert('Lỗi: ' + (r.errors[0]?r.errors[0].message:''));
+    });
+  }
+
   else if(el.dataset.radd)rlAdd(el.dataset.radd);
   else if(el.dataset.rrm){const [rk,ri]=el.dataset.rrm.split(':');rlDel(rk,+ri)}
   else if(el.dataset.rledit)rlEdit(el.dataset.rledit);
@@ -908,7 +1140,7 @@ function pipeCard(){
   else h+=L.map((o,i)=>{const s=o.stats||{},e=Object.entries(s.errors||{}),f=o.type==='CONDITIONAL',nzt=o.type==='NORMALIZE',st=STL[o.status]||STL.OFF;
     const sum=nzt?nzSum(o):f?rlSum(o):`${o.target} = ${o.expression}`,info=o.enabled?nzt?(s.changed!=null?'Đổi '+s.changed+' ô'+(s.overwritten?', ghi đè '+s.overwritten:'')+(s.invalid?'; '+s.invalid+' ô không chuẩn hóa được':'')+(s.review?'; '+s.review+' ô chưa rõ định dạng':''):''):(f?(s.matched!=null?'Khớp '+s.matched+' dòng'+(s.overwritten?', ghi đè '+s.overwritten+' ô':''):''):(s.rows!=null?'Đã tính '+s.rows+' dòng':''))+(e.length?'; ⚠ '+e.map(x=>x[1]+' '+x[0]).join(', '):''):'';
     return`<div class="sg"><div><label><input type="checkbox" data-optg="${o.id}"${o.enabled?' checked':''}> <b>Bước ${i+1}: ${nzt?'Chuẩn hóa':f?'Quy tắc':'Công thức'}${o.name?' "'+esc(o.name)+'"':''}</b></label><small>${esc(sum)}</small><small>${esc(info)} <b style="color:${st[1]}">${st[0]}</b></small></div><div class="rw" style="margin:0"><button class="add" data-opmv="${o.id}:-1"${i?'':' disabled'}>↑</button><button class="add" data-opmv="${o.id}:1"${i<L.length-1?'':' disabled'}>↓</button><button class="add" data-opedit="${o.id}">Sửa</button><button class="add" data-opdel="${o.id}">Xóa</button></div></div>${i<L.length-1?'<div style="text-align:center;color:var(--mute);margin:-2px 0 6px">↓</div>':''}`}).join('');
-  h+=`<div class="rw" style="margin-top:10px"><button class="add" id="fc-undo"${O.can_undo?'':' disabled'}>Hoàn tác</button><button class="add" id="fc-redo"${O.can_redo?'':' disabled'}>Làm lại</button><button class="add" id="pp-report">Báo cáo lỗi</button></div>
+  h+=`<div class="rw" style="margin-top:10px"><button class="add" id="fc-undo"${O.can_undo?'':' disabled'}>Hoàn tác</button><button class="add" id="fc-redo"${O.can_redo?'':' disabled'}>Làm lại</button><button class="add" id="pp-report">Báo cáo lỗi</button><button class="add" id="preset-save-btn">💾 Lưu thành mẫu (Preset)</button><button class="add" id="preset-open-btn">📂 Mở mẫu có sẵn</button></div>
   <label class="f" style="margin-top:8px">Cách đọc số dạng 1.234 hoặc 1,234<select id="nf"><option value="auto"${O.numfmt==='auto'?' selected':''}>Tự nhận từ các ô khác</option><option value="vi"${O.numfmt==='vi'?' selected':''}>Kiểu Việt Nam: 1.234 là 1234, 1,234 là 1,234</option><option value="en"${O.numfmt==='en'?' selected':''}>Kiểu quốc tế: 1,234 là 1234, 1.234 là 1,234</option></select></label>`;
   (O.warnings||[]).forEach(w=>{h+=`<p class="hint">⚠ ${esc(w)}</p>`});
   if(ST.rep){const R=ST.rep;h+=`<h3>Báo cáo lỗi (${R.total_errors} ô hoặc dòng)</h3>`;
@@ -960,6 +1192,426 @@ function nzCard(){
   <label class="f" style="margin-top:8px">Tên bước (tùy chọn)<input id="nz-name" value="${esc(N.name)}" placeholder="Chuẩn hóa số điện thoại"></label>
   <div class="rw" style="margin-top:12px"><button class="add" id="nz-prev">Xem trước</button><button class="go" id="nz-apply" style="padding:8px 18px">${N.op_id?'Lưu thay đổi':'Thêm vào quy trình'}</button>${N.op_id?'<button class="add" id="nz-cancel">Hủy sửa</button>':''}</div>${nzRes()}</section>`;
   return h}
+
+
+/* === STAGE C: FUTURE 1 - SAVED WORKFLOW / PRESET & FUTURE 2 - ADVANCED DATA CLEANING === */
+
+function cleanBlank(){
+  if(!ST.clean){
+    ST.clean = {
+      tab: 'fr',
+      cols: [],
+      find_val: '',
+      replace_val: '',
+      match_type: 'contains',
+      case_sensitive: false,
+      is_regex: false,
+      target_mode: 'new_table',
+      preview: null,
+      res: null,
+      dup_cols: [],
+      dup_mode: 'exact',
+      dup_threshold: 0.85,
+      dup_strategy: 'keep_first',
+      dup_target_mode: 'new_table',
+      dup_info: null,
+      dup_res: null,
+      fmt_cols: [],
+      fmt_kind: 'text',
+      fmt_opts: {case: 'title', trim: true, collapse_spaces: true, strip_accents: false, fix_typo: true, output_format: 'vn_standard'},
+      fmt_res: null
+    };
+  }
+}
+
+function cleanCard(){
+  cleanBlank();
+  const C = ST.clean, I = ST.info;
+  const cols = I.columns || [];
+
+  let h = `<section class="card" id="card-cleaning">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+      <div>
+        <h2 style="margin:0 0 4px">Làm sạch chuyên sâu (Stage C - Future 2)</h2>
+        <p class="sub" style="margin:0">Tìm & thay thế an toàn (Safe Regex), Lọc trùng lặp (Exact/Normalized/Fuzzy) và Chuẩn hóa nhanh.</p>
+      </div>
+      <div class="rw" style="margin:0;gap:6px">
+        <button class="add${C.tab==='fr'?' active':''}" id="clean-tab-fr" style="${C.tab==='fr'?'background:var(--acc);color:#070e17;font-weight:700':''}">🔍 Tìm & Thay thế</button>
+        <button class="add${C.tab==='dup'?' active':''}" id="clean-tab-dup" style="${C.tab==='dup'?'background:var(--acc);color:#070e17;font-weight:700':''}">👥 Lọc trùng lặp</button>
+        <button class="add${C.tab==='fmt'?' active':''}" id="clean-tab-fmt" style="${C.tab==='fmt'?'background:var(--acc);color:#070e17;font-weight:700':''}">⚡ Chuẩn hóa nhanh</button>
+      </div>
+    </div>`;
+
+  // TAB 1: FIND & REPLACE
+  if(C.tab === 'fr'){
+    h += `<div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.08)">
+      <p class="hint">Chọn cột áp dụng (để trống để tìm trên tất cả các cột):</p>
+      <div class="chips">${cols.map(c=>`<label><input type="checkbox" data-cln-col="${esc(c.name)}"${C.cols.includes(c.name)?' checked':''}> ${esc(c.name)}</label>`).join('')}</div>
+      <div class="rw" style="margin-top:8px">
+        <label class="f" style="flex:1">Tìm chuỗi / mẫu Regex<input id="clean-fr-find" value="${esc(C.find_val)}" placeholder="Ví dụ: HN, TP.HCM, hoặc ^(\d+)$"></label>
+        <label class="f" style="flex:1">Thay thế bằng<input id="clean-fr-replace" value="${esc(C.replace_val)}" placeholder="Ví dụ: Hà Nội, hoặc Cụm $1"></label>
+      </div>
+      <div class="rw" style="margin-top:6px;gap:16px">
+        <label class="chips" style="margin:0"><span><input type="radio" name="cln-match" value="contains"${C.match_type==='contains'?' checked':''}> Chứa chuỗi</span></label>
+        <label class="chips" style="margin:0"><span><input type="radio" name="cln-match" value="exact"${C.match_type==='exact'?' checked':''}> Khớp chính xác toàn bộ ô</span></label>
+        <label class="chips" style="margin:0"><span><input type="checkbox" id="clean-fr-regex"${C.is_regex?' checked':''}> Biểu thức chính quy (Safe Regex)</span></label>
+        <label class="chips" style="margin:0"><span><input type="checkbox" id="clean-fr-case"${C.case_sensitive?' checked':''}> Phân biệt hoa thường</span></label>
+      </div>
+      <div class="rw" style="margin-top:10px">
+        <select id="clean-fr-target" style="padding:6px 12px;border-radius:6px">
+          <option value="new_table"${C.target_mode==='new_table'?' selected':''}>Tạo bảng mới "[Thay thế] ..." (Khuyên dùng - bảo toàn dữ liệu gốc)</option>
+          <option value="in_place"${C.target_mode==='in_place'?' selected':''}>Ghi đè trực tiếp bảng hiện tại (có thể Hoàn tác / Undo)</option>
+        </select>
+        <button class="add" id="clean-fr-prev">🔍 Xem trước (Preview)</button>
+        <button class="go" id="clean-fr-apply" style="padding:8px 18px">Thực hiện thay thế</button>
+      </div>`;
+
+    if(C.preview){
+      const p = C.preview;
+      h += `<div style="margin-top:12px;padding:12px;border-radius:8px;background:rgba(0,240,255,0.05);border:1px solid rgba(0,240,255,0.2)">
+        <p class="hint" style="color:var(--ok);font-weight:600">✓ Kết quả xem trước: Khớp ${p.matches_count} ô trên ${p.affected_rows} dòng.</p>`;
+      if(p.preview_items && p.preview_items.length){
+        h += `<div class="tw" style="max-height:200px"><table>
+          <tr><th>Dòng</th><th>Cột</th><th>Giá trị cũ</th><th>Giá trị mới</th></tr>
+          ${p.preview_items.slice(0, 15).map(it=>`<tr><td>${it.row_index}</td><td>${esc(it.col_name)}</td><td style="color:#f87171">${esc(it.old_value)}</td><td style="color:#4ade80">${esc(it.new_value)}</td></tr>`).join('')}
+        </table></div>`;
+      }
+      h += `</div>`;
+    }
+    if(C.res){
+      h += `<p class="hint" style="color:var(--ok);font-weight:600;margin-top:10px">✓ Đã áp dụng: ${C.res.stats.affected_cells} ô thay đổi, ${C.res.stats.affected_rows} dòng ảnh hưởng.</p>`;
+    }
+    h += `</div>`;
+  }
+
+  // TAB 2: DUPLICATE MANAGEMENT
+  else if(C.tab === 'dup'){
+    h += `<div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.08)">
+      <p class="hint">Chọn cột khóa định danh để xác định trùng (để trống: so khớp cả dòng):</p>
+      <div class="chips">${cols.map(c=>`<label><input type="checkbox" data-cln-dupcol="${esc(c.name)}"${C.dup_cols.includes(c.name)?' checked':''}> ${esc(c.name)}</label>`).join('')}</div>
+      <div class="rw" style="margin-top:8px">
+        <label class="f" style="flex:1">Chế độ nhận diện trùng lặp
+          <select id="clean-dup-mode">
+            <option value="exact"${C.dup_mode==='exact'?' selected':''}>Trùng khớp chính xác tuyệt đối (Exact)</option>
+            <option value="normalized"${C.dup_mode==='normalized'?' selected':''}>Trùng khớp sau chuẩn hóa (bỏ dấu, chữ thường, khoảng trắng thừa)</option>
+            <option value="fuzzy"${C.dup_mode==='fuzzy'?' selected':''}>Trùng khớp mờ (Fuzzy Levenshtein & Token Sort)</option>
+          </select>
+        </label>
+        ${C.dup_mode==='fuzzy'?`<label class="f" style="flex:1">Ngưỡng tương đồng tối thiểu: <b id="lbl-dup-thresh">${Math.round(C.dup_threshold*100)}%</b>
+          <input type="range" id="clean-dup-thresh" min="60" max="98" value="${Math.round(C.dup_threshold*100)}" style="width:100%">
+        </label>`:''}
+      </div>
+      <div class="rw" style="margin-top:8px">
+        <label class="f" style="flex:1">Chiến lược xử lý dòng trùng
+          <select id="clean-dup-strategy">
+            <option value="keep_first"${C.dup_strategy==='keep_first'?' selected':''}>Giữ lại dòng đầu tiên, xóa các dòng trùng sau (Khuyên dùng)</option>
+            <option value="keep_last"${C.dup_strategy==='keep_last'?' selected':''}>Giữ lại dòng cuối cùng, xóa các dòng trước</option>
+            <option value="remove_all"${C.dup_strategy==='remove_all'?' selected':''}>Xóa bỏ toàn bộ các dòng bị trùng</option>
+          </select>
+        </label>
+        <label class="f" style="flex:1">Nơi lưu kết quả
+          <select id="clean-dup-target">
+            <option value="new_table"${C.dup_target_mode==='new_table'?' selected':''}>Tạo bảng mới "[Lọc trùng] ..." (Khuyên dùng)</option>
+            <option value="in_place"${C.dup_target_mode==='in_place'?' selected':''}>Ghi đè trực tiếp bảng hiện tại (có thể Hoàn tác)</option>
+          </select>
+        </label>
+      </div>
+      <div class="rw" style="margin-top:10px">
+        <button class="add" id="clean-dup-detect">🔎 Quét tìm trùng lặp</button>
+        <button class="go" id="clean-dup-apply" style="padding:8px 18px">Lọc bỏ trùng lặp</button>
+      </div>`;
+
+    if(C.dup_info){
+      const d = C.dup_info;
+      h += `<div style="margin-top:12px;padding:12px;border-radius:8px;background:rgba(255,170,0,0.06);border:1px solid rgba(255,170,0,0.25)">
+        <p class="hint" style="color:#fbbf24;font-weight:600">🔎 Phát hiện ${d.total_duplicates} dòng trùng lặp trong ${d.clusters.length} nhóm.</p>`;
+      if(d.clusters && d.clusters.length){
+        h += `<p class="hint">Các dòng trùng lặp tiêu biểu: ${d.duplicate_row_indices.slice(0, 10).map(r=>'Dòng #'+r).join(', ')}${d.duplicate_row_indices.length>10?'...':''}</p>`;
+      }
+      h += `</div>`;
+    }
+    if(C.dup_res){
+      h += `<p class="hint" style="color:var(--ok);font-weight:600;margin-top:10px">✓ Đã lọc bỏ thành công ${C.dup_res.stats.removed_count} dòng trùng lặp!</p>`;
+    }
+    h += `</div>`;
+  }
+
+  // TAB 3: QUICK CLEAN
+  else if(C.tab === 'fmt'){
+    h += `<div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.08)">
+      <p class="hint">Chọn cột cần chuẩn hóa nhanh:</p>
+      <div class="chips">${cols.map(c=>`<label><input type="checkbox" data-cln-fmtcol="${esc(c.name)}"${C.fmt_cols.includes(c.name)?' checked':''}> ${esc(c.name)}</label>`).join('')}</div>
+      <div class="rw" style="margin-top:8px">
+        <label class="f" style="flex:1">Loại định dạng
+          <select id="clean-fmt-kind">
+            <option value="text"${C.fmt_kind==='text'?' selected':''}>Văn bản (Hoa/Thường, Bỏ dấu tiếng Việt, Xóa ký tự vô hình)</option>
+            <option value="phone"${C.fmt_kind==='phone'?' selected':''}>Số điện thoại (Việt Nam 10 số, nhóm 4-3-3, E.164)</option>
+            <option value="email"${C.fmt_kind==='email'?' selected':''}>Email (Sửa typo domain @gmai.com, chữ thường)</option>
+            <option value="number"${C.fmt_kind==='number'?' selected':''}>Số thực (Phân tách hàng nghìn / thập phân)</option>
+            <option value="currency"${C.fmt_kind==='currency'?' selected':''}>Tiền tệ (Nhận diện VND, USD, EUR...)</option>
+          </select>
+        </label>
+      </div>
+      <div class="rw" style="margin-top:10px">
+        <button class="go" id="clean-fmt-apply" style="padding:8px 18px">Thực hiện chuẩn hóa ngay</button>
+      </div>`;
+    if(C.fmt_res){
+      h += `<p class="hint" style="color:var(--ok);font-weight:600;margin-top:10px">✓ Đã chuẩn hóa ${C.fmt_res.stats.changed_cells} ô dữ liệu thành công!</p>`;
+    }
+    h += `</div>`;
+  }
+
+  h += `</section>`;
+  return h;
+}
+
+/* === PRESET MODAL & PRESET LOGIC === */
+let PRESETS_LIST = [];
+let SHOW_PRESET_MODAL = false;
+
+async function loadPresetsList(){
+  try{
+    const r = await api('/api/preset/list');
+    PRESETS_LIST = (r && r.data && r.data.presets) || [];
+  }catch(e){
+    PRESETS_LIST = [];
+  }
+}
+
+function renderPresetModal(){
+  let el = document.getElementById('preset-modal-wrap');
+  if(!el){
+    el = document.createElement('div');
+    el.id = 'preset-modal-wrap';
+    document.body.appendChild(el);
+  }
+  if(!SHOW_PRESET_MODAL){
+    el.innerHTML = '';
+    return;
+  }
+
+  let h = `<div style="position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.75);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px;backdrop-filter:blur(6px)">
+    <div style="background:#0f172a;border:1px solid rgba(0,240,255,0.4);border-radius:12px;max-width:760px;width:100%;max-height:85vh;overflow-y:auto;padding:24px;box-shadow:0 20px 50px rgba(0,0,0,0.8);color:#e2e8f0">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;border-bottom:1px solid rgba(255,255,255,0.1);padding-bottom:12px">
+        <h3 style="margin:0;color:#00f0ff;font-size:18px">📂 Quản lý mẫu quy trình (Saved Presets)</h3>
+        <button id="preset-modal-close" class="add" style="padding:4px 10px;font-size:14px">✕ Đóng</button>
+      </div>
+
+      <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px">
+        <label class="add" style="cursor:pointer;padding:7px 14px;font-size:13px;display:inline-flex;align-items:center;gap:6px">
+          📥 Nhập mẫu từ file JSON
+          <input type="file" id="preset-import-file" accept=".json" style="display:none">
+        </label>
+      </div>`;
+
+  if(!PRESETS_LIST.length){
+    h += `<p class="hint">Chưa có mẫu nào được lưu. Bạn có thể lưu quy trình hiện tại bằng nút "💾 Lưu thành mẫu (Preset)" trong Quy trình biến đổi.</p>`;
+  } else {
+    h += `<div class="tw"><table>
+      <tr><th>Tên mẫu</th><th>Số bước</th><th>Yêu cầu cột</th><th>Cập nhật</th><th>Thao tác</th></tr>
+      ${PRESETS_LIST.map(p=>`<tr>
+        <td><b>${esc(p.name)}</b>${p.description?`<br><small style="color:#94a3b8">${esc(p.description)}</small>`:''}</td>
+        <td style="text-align:center">${p.step_count} bước</td>
+        <td><small>${(p.column_requirements||[]).slice(0,3).map(esc).join(', ')}${(p.column_requirements||[]).length>3?'...':''}</small></td>
+        <td><small>${esc(p.updated_at||p.created_at||'')}</small></td>
+        <td>
+          <div style="display:flex;gap:4px">
+            <button class="add" data-preset-apply="${p.id}" style="padding:3px 8px;font-size:11.5px">Áp dụng</button>
+            <button class="add" data-preset-export="${p.id}" style="padding:3px 8px;font-size:11.5px">Tải JSON</button>
+            <button class="add" data-preset-del="${p.id}" style="padding:3px 8px;font-size:11.5px;color:#f87171">Xóa</button>
+          </div>
+        </td>
+      </tr>`).join('')}
+    </table></div>`;
+  }
+
+  h += `</div></div>`;
+  el.innerHTML = h;
+
+  // Modal event listeners
+  const closeBtn = document.getElementById('preset-modal-close');
+  if(closeBtn) closeBtn.onclick = () => { SHOW_PRESET_MODAL = false; renderPresetModal(); };
+
+  const importFile = document.getElementById('preset-import-file');
+  if(importFile) importFile.onchange = async (e) => {
+    if(e.target.files && e.target.files[0]){
+      const reader = new FileReader();
+      reader.onload = async (ev) => {
+        try {
+          const res = await fapi('/api/preset/import', { json_content: ev.target.result });
+          if(res.success){
+            alert('✓ Đã nhập mẫu "' + res.data.preset.name + '" thành công!');
+            await loadPresetsList();
+            renderPresetModal();
+          } else {
+            alert('Lỗi nhập mẫu: ' + (res.errors[0] ? res.errors[0].message : 'Không xác định'));
+          }
+        } catch(err){
+          alert('Lỗi xử lý file: ' + err.message);
+        }
+      };
+      reader.readAsText(e.target.files[0]);
+    }
+  };
+
+  el.querySelectorAll('[data-preset-apply]').forEach(btn => {
+    btn.onclick = async () => {
+      const pid = btn.dataset.presetApply;
+      if(confirm('Bạn có chắc muốn áp dụng mẫu này vào bảng hiện tại?')){
+        const res = await fapi('/api/preset/apply', { id: ST.id, table: ST.t, preset_id: pid });
+        if(res.success){
+          alert('✓ Áp dụng quy trình thành công!');
+          SHOW_PRESET_MODAL = false;
+          renderPresetModal();
+          await afterChange();
+        } else {
+          alert('Không thể áp dụng: ' + (res.errors[0] ? res.errors[0].message : 'Lỗi'));
+        }
+      }
+    };
+  });
+
+  el.querySelectorAll('[data-preset-export]').forEach(btn => {
+    btn.onclick = async () => {
+      const pid = btn.dataset.presetExport;
+      const res = await fapi('/api/preset/export', { preset_id: pid });
+      if(res.success && res.data.json_content){
+        const blob = new Blob([res.data.json_content], {type: 'application/json'});
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `preset_${pid}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    };
+  });
+
+  el.querySelectorAll('[data-preset-del]').forEach(btn => {
+    btn.onclick = async () => {
+      const pid = btn.dataset.presetDel;
+      if(confirm('Bạn có chắc muốn xóa mẫu này?')){
+        await fapi('/api/preset/delete', { preset_id: pid });
+        await loadPresetsList();
+        renderPresetModal();
+      }
+    };
+  });
+}
+
+
+
+/* === STAGE C: FUTURE 4 - DATA VALIDATION RULES (BUSINESS RULES) === */
+
+function bRulesBlank(){
+  if(!ST.bRules){
+    ST.bRules = [
+      {id: "br_1", name: "Số lượng >= 0", type: "compare", column: "", operator: ">=", value: 0},
+      {id: "br_2", name: "Email hợp lệ", type: "valid_email", column: ""},
+    ];
+    ST.bRulesResult = null;
+    ST.bRulesNew = {type: "compare", column: "", operator: ">=", value: "0", target_column: "", name: ""};
+  }
+}
+
+function businessRulesCard(){
+  bRulesBlank();
+  const I = ST.info;
+  const cols = (I && I.columns) || [];
+  const R = ST.bRules || [];
+  const RES = ST.bRulesResult;
+
+  let h = `<section class="card" id="card-business-rules">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px">
+      <div>
+        <h2 style="margin:0 0 4px">Quy tắc kiểm định nghiệp vụ (Stage C - Future 4)</h2>
+        <p class="sub" style="margin:0">Kiểm tra logic nghiệp vụ: Tuổi >= 18, Email/SĐT hợp lệ, Ngày kết thúc >= Ngày bắt đầu, Không được trùng mã.</p>
+      </div>
+      <div>
+        <button class="go" id="btn-validate-brules" style="padding:7px 16px;font-size:13px">▶ Kiểm tra quy tắc</button>
+      </div>
+    </div>`;
+
+  if(RES){
+    h += `<div style="margin-top:14px;padding:12px 16px;border-radius:10px;background:rgba(15,27,45,0.85);border:1px solid ${RES.violated_rows_count ? 'rgba(239,68,68,0.4)' : 'rgba(34,197,94,0.4)'};display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px">
+      <div style="display:flex;gap:18px;align-items:center">
+        <span style="font-size:15px;font-weight:700;color:#22c55e">✓ ${RES.valid_rows_count} dòng hợp lệ (${RES.valid_percent}%)</span>
+        ${RES.violated_rows_count ? `<span style="font-size:15px;font-weight:700;color:#ef4444">✗ ${RES.violated_rows_count} dòng vi phạm</span>` : '<span style="font-size:14px;color:#94a3b8">Không có dòng vi phạm nào!</span>'}
+      </div>
+      <div style="font-size:12px;color:#94a3b8">Tổng cộng: ${RES.total_rows} dòng</div>
+    </div>`;
+
+    if(RES.violations && RES.violations.length){
+      h += `<div style="margin-top:10px">
+        <h3 style="margin:0 0 8px;font-size:13px;color:#fbbf24">Danh sách dòng vi phạm (${RES.violations.length} dòng):</h3>
+        <div class="tw" style="max-height:260px"><table>
+          <tr><th>Dòng #</th><th>Quy tắc vi phạm</th><th>Cột</th><th>Giá trị thực tế</th><th>Lý do vi phạm</th></tr>
+          ${RES.violations.slice(0, 30).map(v=>`<tr>
+            <td style="font-weight:700;color:#f87171">Dòng ${v.row_number}</td>
+            <td>${esc(v.violations.map(x=>x.rule_name).join(', '))}</td>
+            <td>${esc(v.violations.map(x=>x.column).join(', '))}</td>
+            <td style="color:#fbbf24">${esc(v.violations.map(x=>String(x.actual_value||'')).join(', '))}</td>
+            <td style="color:#f87171"><small>${esc(v.violations.map(x=>x.reason).join('; '))}</small></td>
+          </tr>`).join('')}
+        </table></div>
+      </div>`;
+    }
+  }
+
+  // Danh sách quy tắc hiện tại
+  h += `<div style="margin-top:14px">
+    <h3 style="margin:0 0 8px;font-size:13.5px">Danh sách quy tắc kiểm tra:</h3>`;
+
+  if(!R.length){
+    h += `<p class="hint">Chưa có quy tắc nào. Thêm quy tắc bên dưới để bắt đầu kiểm tra.</p>`;
+  } else {
+    h += R.map((r, idx)=>`<div class="sg" style="margin-bottom:8px">
+      <div>
+        <b>${idx+1}. ${esc(r.name || 'Quy tắc')}</b>
+        <small style="color:#94a3b8">Cột: <b>${esc(r.column || '(chưa chọn)')}</b> | Loại: ${r.type} ${r.operator?r.operator:''} ${r.value!==undefined?r.value:''}</small>
+      </div>
+      <div>
+        <button class="rm" data-brule-del="${idx}" aria-label="Xóa quy tắc">✕</button>
+      </div>
+    </div>`).join('');
+  }
+
+  // Form thêm quy tắc mới
+  h += `<div style="margin-top:14px;padding:12px;border-radius:8px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.08)">
+    <b style="font-size:13px;color:var(--acc)">+ Thêm quy tắc mới:</b>
+    <div class="rw" style="margin-top:8px">
+      <select id="br-new-type">
+        <option value="compare">So sánh số với giá trị ([Cột] >= Giá trị)</option>
+        <option value="compare_columns">So sánh giữa 2 cột ([Cột A] >= [Cột B])</option>
+        <option value="valid_email">Email đúng định dạng</option>
+        <option value="valid_phone">Số điện thoại Việt Nam hợp lệ</option>
+        <option value="not_empty">Không được để trống</option>
+        <option value="unique">Giá trị không được trùng lặp</option>
+      </select>
+      <select id="br-new-col">
+        <option value="">-- Chọn cột kiểm tra --</option>
+        ${cols.map(c=>`<option value="${esc(c.name)}">${esc(c.name)}</option>`).join('')}
+      </select>
+      <select id="br-new-op">
+        <option value=">=">>= (Lớn hơn hoặc bằng)</option>
+        <option value="<="><= (Nhỏ hơn hoặc bằng)</option>
+        <option value=">">> (Lớn hơn)</option>
+        <option value="<">< (Nhỏ hơn)</option>
+        <option value="==">== (Bằng chính xác)</option>
+        <option value="!=">!= (Khác)</option>
+      </select>
+      <input id="br-new-val" placeholder="Giá trị so sánh (e.g. 0, 18)" style="width:130px">
+      <select id="br-new-target-col" style="display:none">
+        <option value="">-- Cột so sánh cùng --</option>
+        ${cols.map(c=>`<option value="${esc(c.name)}">${esc(c.name)}</option>`).join('')}
+      </select>
+      <button class="add" id="btn-add-brule">+ Thêm</button>
+    </div>
+  </div>`;
+
+  h += `</section>`;
+  return h;
+}
 
 /* === GỘP BẢNG & SO KHỚP CỘT THÔNG MINH (SMART MERGE - GIAI ĐOẠN 6 & 7) === */
 function mergeCard(){

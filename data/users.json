@@ -1,0 +1,10 @@
+{
+  "admin": {
+    "username": "admin",
+    "role": "ADMIN",
+    "full_name": "Quản trị viên hệ thống",
+    "salt": "8fc0362dcf28930ebd1ec113e3bb7f3b",
+    "password_hash": "72f58c853a9bfe31e7e59a3eb15a0f27ce7b0badee16c78f9ec8d47b2ea22cb0",
+    "created_at": "2026-11-08 00:00:00"
+  }
+}

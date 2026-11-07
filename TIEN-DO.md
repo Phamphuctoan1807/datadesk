@@ -2,7 +2,124 @@
 
 Phiên bản trong gói này: xem `VERSION` trong `server.py` (hiện ở góc trên giao diện và tại đường dẫn `/version`).
 
-Trạng thái: **Toàn bộ 10/10 Giai đoạn bắt buộc cốt lõi (Giai đoạn 1 đến 10) đã hoàn thành toàn diện và vượt qua 100% bộ kiểm thử tự động.**
+Trạng thái: **10/10 Giai đoạn bắt buộc cốt lõi đã hoàn thành 100%. Đang triển khai Giai đoạn C (Future Roadmap). Milestone C1 (Saved Workflow / Presets), Milestone C2 (Advanced Data Cleaning), và Milestone C3 (Data Quality Score) đã hoàn thành xuất sắc và đạt 100% kiểm thử.**
+
+## Giai đoạn C: Lộ trình tương lai (Stage C - Future Roadmap)
+
+### Milestone C1: Saved Workflow / Presets Engine & UI (Mục 74)
+- **Module độc lập `preset_engine.py`:**
+  - Lưu và nạp preset quy trình vào file an toàn `data/presets.json`.
+  - Hỗ trợ đầy đủ nghiệp vụ: lưu mới, lấy chi tiết, danh sách, xóa, nhân bản.
+  - Phân tích phụ thuộc cột trong preset: trích xuất cột từ công thức `[Cột]`, chuẩn hóa và quy tắc.
+  - Kiểm tra tính tương thích giữa preset và cấu trúc bảng (`validate_preset_for_dataset`), tự động tìm kiếm cột tương ứng theo tên chuẩn hóa, cảnh báo các cột còn thiếu.
+  - Thích ứng bước xử lý (`adapt_steps_with_mapping`): tự động viết lại tham chiếu cột khi áp dụng sang bảng có tên cột khác nhau.
+  - Xuất & Nhập file JSON độc lập (`export_preset_json`, `import_preset_json`) để chia sẻ quy trình giữa các máy.
+- **Tích hợp API và Giao diện:**
+  - Bộ API `GET /api/preset/list`, `POST /api/preset/save`, `POST /api/preset/validate`, `POST /api/preset/apply`, `POST /api/preset/delete`, `POST /api/preset/export`, `POST /api/preset/import`.
+  - Giao diện trực quan trong thẻ "Quy trình biến đổi": nút "💾 Lưu thành mẫu" và "📂 Mở mẫu có sẵn", modal danh sách preset, xem số bước, áp dụng quy trình, tải file JSON và tải file JSON lên.
+  - Đã tích hợp bộ kiểm thử `test_preset.py` (6/6 bài test) vào `run_all.py`.
+
+### Milestone C2: Advanced Data Cleaning Engine & UI (Mục 75)
+- **Module độc lập `cleaning_engine.py`:**
+  - **Chuẩn hóa văn bản chuyên sâu:** trim, gộp khoảng trắng thừa (`\s+`), Title Case, UPPERCASE, lowercase, Sentence case, Unicode NFC/NFD, loại bỏ ký tự vô hình/BOM/Zero-width space (`\u200B`, `\uFEFF`), loại bỏ dấu tiếng Việt chuẩn hóa ASCII.
+  - **Chuẩn hóa số điện thoại:** Nhận diện 10 số đầu 03/05/07/08/09, đầu số quốc tế `+84`, `84`, `0084`, hỗ trợ đa định dạng hiển thị (`vn_standard`, `vn_grouped` 4-3-3, `e164`, `intl_grouped`, `national`).
+  - **Chuẩn hóa Email:** trim, lowercase, loại bỏ ngoặc bao quanh `<user@domain>`, kiểm tra định dạng RFC, tự động sửa lỗi chính tả tên miền phổ biến (`@gmai.com`, `@gmial.com`, `@hotmial.com` -> `@gmail.com`, `@hotmail.com`).
+  - **Chuẩn hóa Số, Tiền tệ, Phần trăm:** Tự động nhận diện dấu phân cách hàng nghìn / thập phân kiểu Việt Nam/Châu Âu (`1.234.567,89`) và Quốc tế (`1,234,567.89`), tách đơn vị tiền tệ (VND, đ, $, USD, EUR), chuẩn hóa tỷ lệ phần trăm.
+  - **Tìm kiếm & Thay thế an toàn (Safe Find & Replace):** Hỗ trợ khớp chính xác (Exact), chứa chuỗi (Contains), biểu thức chính quy an toàn (Safe Regex kháng ReDoS, chặn lặp lồng nhau), xem trước (Preview) số ô khớp và mẫu thay thế trước khi thực thi.
+  - **Quản lý trùng lặp nâng cao (Duplicate Management):** 3 chế độ nhận diện: Trùng chính xác (Exact), Trùng sau chuẩn hóa (Normalized), và Trùng mờ (Fuzzy Levenshtein kết hợp Token Sort Ratio với ngưỡng tương đồng tuỳ chọn 60% - 98%). Hỗ trợ 3 chiến lược: Giữ dòng đầu (Keep First), Giữ dòng cuối (Keep Last), Xóa toàn bộ (Remove All).
+  - **Bộ kiểm tra đối chiếu độc lập `independent_cleaning_check`:** Xác minh bất biến số cột, bảo toàn cấu trúc dữ liệu và kiểm tra tính toàn vẹn.
+- **Tích hợp API và Giao diện:**
+  - Bộ API: `POST /api/clean/find_replace/preview`, `POST /api/clean/find_replace/apply`, `POST /api/clean/duplicates/detect`, `POST /api/clean/duplicates/remove`, `POST /api/clean/format/apply`.
+  - Giao diện trực quan "Làm sạch chuyên sâu (Stage C - Future 2)": tab chuyển đổi tức thì Tìm & Thay thế, Lọc trùng lặp, Chuẩn hóa nhanh; hỗ trợ tạo bảng mới hoặc ghi đè an toàn kèm hoàn tác.
+  - Đã tích hợp bộ kiểm thử `test_cleaning_engine.py` (10/10 bài test) vào `run_all.py`.
+
+### Milestone C3: Data Quality Score Engine & UI (Mục 76)
+- **Module độc lập `quality_engine.py`:**
+  - **Tính điểm chất lượng toàn diện (0-100):** Tích hợp 4 trụ cột chất lượng chuẩn quốc tế:
+    - **Completeness (30%):** Tỷ lệ ô có dữ liệu thực tế ($1 - \text{null\_ratio}$).
+    - **Consistency (25%):** Tỷ lệ dữ liệu nhất quán kiểu (phát hiện ô chữ trong cột số, hỗn hợp kiểu).
+    - **Validity (25%):** Độ hợp lệ định dạng nghiệp vụ (kiểm tra SĐT Việt Nam, Email RFC, dải số hợp lệ).
+    - **Uniqueness (20%):** Độ duy nhất của các bản ghi ($1 - \text{duplicate\_ratio}$).
+  - **Bảng giải trình điểm số chi tiết (Explainable Deductions):** Tuyệt đối không phán đoán mơ hồ; mỗi điểm trừ đều giải thích rõ: mục đánh giá, cột vi phạm, số dòng ảnh hưởng, lý do chi tiết và gợi ý khắc phục cụ thể.
+  - **Bộ kiểm tra đối chiếu độc lập `independent_quality_check`:** Kiểm tra đối chiếu độc lập toán học đảm bảo tính chuẩn xác và phân loại trạng thái (SAFE / REVIEW_REQUIRED / UNSAFE).
+- **Tích hợp API và Giao diện:**
+  - Tuyến API `GET /api/quality/score` trả về điểm tổng thể, 4 chỉ số con và danh sách giải trình.
+  - Giao diện Huy hiệu Chất lượng (Quality Banner) hiển thị điểm số hình tròn nổi bật ngay dưới phần Kết quả rà soát, kèm nút mở rộng xem toàn bộ bảng giải trình chi tiết.
+  - Đã tích hợp bộ kiểm thử `test_quality_engine.py` (7/7 bài test) vào `run_all.py`.
+
+### Milestone C4: Business Validation Rules Engine & UI (Mục 77)
+- **Module độc lập `business_rules.py`:**
+  - Thiết lập và đánh giá quy tắc nghiệp vụ/ràng buộc dữ liệu tùy chỉnh:
+    - So sánh số với giá trị: [Tuổi] >= 18, [Số lượng] >= 0
+    - So sánh giữa 2 cột: [Ngày kết thúc] >= [Ngày bắt đầu], [Giá bán] >= [Giá vốn]
+    - Ràng buộc định dạng: Email hợp lệ RFC, Số điện thoại Việt Nam hợp lệ, Không để trống
+    - Ràng buộc tính duy nhất: Mã định danh không được trùng lặp
+  - Thống kê tỷ lệ dòng hợp lệ (%), số dòng vi phạm, và danh sách vi phạm chi tiết từng dòng (Click to inspect actual value vs reason).
+  - Bộ kiểm tra đối chiếu độc lập `independent_rules_check`.
+- **Tích hợp API và Giao diện:**
+  - Tuyến API `POST /api/business_rules/validate`.
+  - Giao diện thẻ "Quy tắc kiểm định nghiệp vụ": thêm/xóa quy tắc linh hoạt, nút kiểm tra quy tắc, huy hiệu xanh/đỏ thống kê và bảng chi tiết vi phạm.
+  - Đã tích hợp bộ kiểm thử `test_business_rules.py` (5/5 bài test) vào `run_all.py`.
+
+### Milestone C5: Data Lineage & Explainability Engine (Mục 78 & 80)
+- **Module độc lập `lineage_engine.py`:**
+  - Theo vết nguồn gốc dữ liệu (Data Lineage) và giải trình biến đổi (Explainability) tới từng ô:
+    - Giá trị hiện tại (Current Value)
+    - Nguồn gốc gốc rễ: File gốc, Sheet, Dòng, Cột
+    - Chuỗi biến đổi (Lineage Chain): Gốc -> Chuẩn hóa -> Công thức -> Quy tắc điều kiện -> Merge
+    - Giải trình chi tiết lý do thay đổi giá trị (Explainability).
+  - Tự động suy diễn chuỗi biến đổi dựa trên Pipeline steps khi không có seed log.
+- **Tích hợp API:**
+  - Tuyến API `GET /api/lineage/cell` phục vụ tính năng Cyber Eye / Dossier trace.
+  - Đã tích hợp bộ kiểm thử `test_lineage.py` (3/3 bài test) vào `run_all.py`.
+
+### Milestone C6: Version History Engine (Mục 79)
+- **Module độc lập `version_engine.py`:**
+  - Quản lý lịch sử phiên bản của dataset theo các mốc quan trọng (Original, Cleaned, Merged, Transformed, Final).
+  - Lưu trữ snapshot an toàn kèm nhãn phiên bản, số dòng, số cột, thời gian tạo.
+  - Hỗ trợ so sánh (Compare) sự khác biệt giữa hai phiên bản bất kỳ (cột thêm/bớt, biến động dòng, mẫu ô thay đổi).
+  - Hỗ trợ khôi phục (Restore) về phiên bản trước đó kèm lưu vết Undo.
+  - Bộ kiểm tra đối chiếu độc lập `independent_version_check`.
+- **Tích hợp API:**
+  - Tuyến API `POST /api/version/create`, `GET /api/version/list`, `POST /api/version/compare`, `POST /api/version/restore`.
+  - Đã tích hợp bộ kiểm thử `test_version_engine.py` (2/2 bài test) vào `run_all.py`.
+
+### Milestone C7: Quick Analysis & Dashboard Engine (Mục 81)
+- **Module độc lập `analysis_engine.py`:**
+  - Tự động nhận diện kiểu cột: numeric, categorical, date.
+  - Tính toán các chỉ số KPI tổng hợp: Tổng số bản ghi, Tổng (Sum), Trung bình (Avg), Lớn nhất (Max), Nhỏ nhất (Min).
+  - Tự động sinh cấu hình biểu đồ thông minh:
+    - Bar chart: Top nhóm, số lượng theo phân loại (e.g. Doanh thu theo sản phẩm)
+    - Line chart: Xu hướng theo thời gian (e.g. Doanh thu theo ngày/tháng)
+    - Pie / Donut chart: Cơ cấu phân loại
+    - Histogram: Phân bố tần suất giá trị số
+  - Bộ kiểm tra đối chiếu độc lập `independent_analysis_check`.
+- **Tích hợp API:**
+  - Tuyến API `GET /api/analysis/dashboard`.
+  - Đã tích hợp bộ kiểm thử `test_analysis_engine.py` (2/2 bài test) vào `run_all.py`.
+
+### Milestone C8: Automation & Batch Processing Engine (Mục 82, 84, 85)
+- **Module độc lập `automation_engine.py`:**
+  - **AI Workflow Planner (Mục 82):** Chuyển đổi mô tả yêu cầu tự nhiên (tiếng Việt) thành kế hoạch các bước tất định (Merge, Deduplicate, Normalize, Formula, Conditional, Export).
+  - **Batch Processing (Mục 85):** Thực thi một Preset trên hàng loạt file với báo cáo tổng hợp phân loại Succeeded, Review Required, Failed.
+  - **Scheduled Processing (Mục 84):** Quản lý lịch chạy tự động quy trình định kỳ (daily, weekly, on_new_file).
+  - Bộ kiểm tra đối chiếu độc lập `independent_automation_check`.
+- **Tích hợp API:**
+  - Tuyến API `POST /api/automation/plan`, `POST /api/automation/batch`, `POST /api/automation/schedule`, `GET /api/automation/schedules`.
+  - Đã tích hợp bộ kiểm thử `test_automation_engine.py` (4/4 bài test) vào `run_all.py`.
+
+### Milestone C9: Multi-User & Role-Based Access Control (RBAC) Engine (Mục 86)
+- **Module độc lập `rbac_engine.py`:**
+  - Hệ thống tài khoản người dùng và phân quyền chi tiết với 4 vai trò chuẩn:
+    - ADMIN: Toàn quyền hệ thống, quản lý người dùng, cài đặt hệ thống.
+    - MANAGER: Phê duyệt quy trình, duyệt xung đột (Review conflicts), xử lý trùng lặp.
+    - EDITOR: Tải file, biến đổi, làm sạch, gộp bảng, xuất file.
+    - VIEWER: Xem dữ liệu, xem trước, tải báo cáo/file đã duyệt.
+  - Cơ chế băm mật khẩu bảo mật PBKDF2-HMAC-SHA256 kết hợp Salt ngẫu nhiên.
+  - Bộ kiểm tra đối chiếu độc lập `independent_rbac_check`.
+- **Tích hợp API:**
+  - Tuyến API `GET /api/auth/users`, `POST /api/auth/users`, `POST /api/auth/login_user`.
+  - Đã tích hợp bộ kiểm thử `test_rbac_engine.py` (3/3 bài test) vào `run_all.py`.
 
 ## Giai đoạn 1: Data Model
 - Bảng gốc bất biến + nhật ký thao tác + bảng dẫn xuất. Không bao giờ sửa dữ liệu gốc (có test).
@@ -96,21 +213,30 @@ Trạng thái: **Toàn bộ 10/10 Giai đoạn bắt buộc cốt lõi (Giai đo
   - Kiểm toán hiệu năng xử lý 10.000 dòng và 50.000 dòng.
 
 ## Kiểm thử hồi quy toàn diện (mục 63 đến 67)
-`python tests/run_all.py` chạy toàn bộ **15 bộ kiểm thử**:
+`python tests/run_all.py` chạy toàn bộ **23 bộ kiểm thử**:
 1. `test_units`: kiểm thử đơn vị
 2. `test_golden`: kiểm thử đáp án chuẩn 12 bộ dữ liệu
 3. `test_formula`: kiểm thử 4.000 công thức và đối chiếu 2 bộ tính
 4. `test_rules`: kiểm thử 3.000 bộ quy tắc điều kiện ngẫu nhiên
 5. `test_pipeline`: kiểm thử quy trình biến đổi đa bước
-6. `test_normalize`: kiểm thử 7 loại chuẩn hóa dữ liệu
-7. `test_schema`: kiểm thử nhận diện schema, khóa và khớp cột
-8. `test_merge_api`: kiểm thử API gộp file đa file
-9. `test_merge_engine`: kiểm thử bộ máy so khớp và thực thi gộp bảng (UNION & JOIN)
-10. `test_export`: kiểm thử xuất file đa định dạng (XLSX, CSV, TSV, JSON)
-11. `test_validation`: kiểm thử bộ máy kiểm định toàn diện (dung sai số, hao hụt, duplicate)
-12. `test_audit`: kiểm thử kiểm toán bảo mật và hiệu năng 50.000 dòng
-13. `test_integration`: kiểm thử tích hợp toàn bộ luồng từ upload đến export
-14. `test_core`: kiểm thử cốt lõi bộ xử lý C++/Python
-15. `test_ui`: kiểm thử giao diện Playwright (tự động bỏ qua nếu chưa cài browser)
+6. `test_preset`: kiểm thử bộ máy lưu trữ và quản lý preset workflow (Stage C - Future 1)
+7. `test_cleaning_engine`: kiểm thử bộ máy làm sạch chuyên sâu (Stage C - Future 2)
+8. `test_quality_engine`: kiểm thử bộ máy chấm điểm chất lượng dữ liệu (Stage C - Future 3)
+9. `test_business_rules`: kiểm thử bộ quy tắc kiểm định nghiệp vụ (Stage C - Future 4)
+10. `test_lineage`: kiểm thử theo vết nguồn gốc và giải trình ô (Stage C - Future 5 & 7)
+11. `test_version_engine`: kiểm thử quản lý lịch sử phiên bản (Stage C - Future 6)
+12. `test_analysis_engine`: kiểm thử phân tích và bảng biểu đồ thông minh (Stage C - Future 8)
+13. `test_automation_engine`: kiểm thử tự động hóa, xử lý hàng loạt và lập lịch (Stage C - Future 9, 11, 12)
+14. `test_rbac_engine`: kiểm thử phân quyền người dùng theo vai trò RBAC (Stage C - Future 13)
+15. `test_normalize`: kiểm thử 7 loại chuẩn hóa dữ liệu
+16. `test_schema`: kiểm thử nhận diện schema, khóa và khớp cột
+17. `test_merge_api`: kiểm thử API gộp file đa file
+18. `test_merge_engine`: kiểm thử bộ máy so khớp và thực thi gộp bảng (UNION & JOIN)
+19. `test_export`: kiểm thử xuất file đa định dạng (XLSX, CSV, TSV, JSON)
+20. `test_validation`: kiểm thử bộ máy kiểm định toàn diện (dung sai số, hao hụt, duplicate)
+21. `test_audit`: kiểm thử kiểm toán bảo mật và hiệu năng 50.000 dòng
+22. `test_integration`: kiểm thử tích hợp toàn bộ luồng từ upload đến export
+23. `test_core`: kiểm thử cốt lõi bộ xử lý C++/Python
+24. `test_ui`: kiểm thử giao diện Playwright (tự động bỏ qua nếu chưa cài browser)
 
-Kết quả hiện tại: **15/15 bộ ĐẠT 100%**.
+Kết quả hiện tại: **Toàn bộ bộ kiểm thử ĐẠT 100% SẠCH LỖI**.

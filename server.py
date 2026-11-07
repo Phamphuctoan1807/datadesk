@@ -10,8 +10,17 @@ import pipeline as PL
 import normalize as NZ
 import schema as SC
 import merge_engine as ME
+import preset_engine as PE
 import export as EXP
 import validate_engine as VE
+import cleaning_engine as CE
+import quality_engine as QE
+import business_rules as BR
+from lineage_engine import LINEAGE
+from version_engine import VERSIONS, independent_version_check
+import analysis_engine as AE
+from automation_engine import AUTOMATION, independent_automation_check
+from rbac_engine import RBAC, independent_rbac_check
 import openpyxl
 from openpyxl.styles import PatternFill, Font
 from openpyxl.utils import get_column_letter
@@ -790,6 +799,498 @@ def validate_api():  # kiểm tra toàn bộ quy trình như khi xuất nhưng k
     p = dict(request.get_json(force=True)); p["_dry"] = True; r = _process(p)
     return R(r["ok"], data={"checks": r["checks"], "status": r["status"], "total": r["total"]},
              errors=[{"code": "CHECK_FAILED", "message": "%s: %s" % (k["t"], k["d"])} for k in r["checks"] if not k["ok"]])
+
+# ---------- Saved Workflow / Presets (Stage C - Future 1, Mục 74) ----------
+@app.get("/api/preset/list")
+def preset_list():
+    return R(True, data={"presets": PE.list_presets()})
+
+@app.post("/api/preset/save")
+def preset_save():
+    p = request.get_json(force=True)
+    rec, ti, st = _ctx(p)
+    name = str(p.get("name", "")).strip()
+    desc = str(p.get("description", "")).strip()
+    steps = st.get("list", [])
+    if not steps:
+        raise ValueError("Quy trình hiện tại chưa có bước nào để lưu.")
+    saved = PE.save_preset(name, steps, desc)
+    _log(st, "Lưu quy trình mẫu", None, "Lưu %d bước thành mẫu '%s'" % (len(steps), name))
+    return R(True, data={"preset": saved})
+
+@app.post("/api/preset/validate")
+def preset_validate():
+    p = request.get_json(force=True)
+    rec, ti, st = _ctx(p)
+    pid = p.get("preset_id")
+    preset = PE.get_preset(pid)
+    if not preset:
+        raise ValueError("Không tìm thấy quy trình mẫu.")
+    t = get_table(rec, ti)
+    hdr = guess_header(t) or bool(t.get("derived"))
+    headers = [disp(c).strip() for c in t["rows"][0]] if hdr else ["Cột %d" % (j + 1) for j in range(len(t["rows"][0]))]
+    val = PE.validate_preset_for_dataset(preset, headers)
+    return R(True, data={"validation": val, "preset": preset})
+
+@app.post("/api/preset/apply")
+def preset_apply():
+    p = request.get_json(force=True)
+    rec, ti, st = _ctx(p)
+    pid = p.get("preset_id")
+    preset = PE.get_preset(pid)
+    if not preset:
+        raise ValueError("Không tìm thấy quy trình mẫu.")
+    
+    col_mapping = p.get("mapping") or {}
+    steps = PE.adapt_steps_with_mapping(preset["steps"], col_mapping)
+    
+    # Kiểm tra thử nghiệm các bước trên bảng hiện tại
+    d = _trial(rec, ti, steps)
+    if d.get("errors"):
+        return R(False, errors=d["errors"], warnings=d.get("warnings", []))
+    
+    _commit(st, steps)
+    _cache_put(rec, ti, steps, d)
+    _log(st, "Áp dụng quy trình mẫu", None, "Áp dụng mẫu '%s' (%d bước)" % (preset["name"], len(steps)))
+    return R(True, data={"state": _state(rec, ti, st), "preset": preset}, warnings=d.get("warnings", []))
+
+@app.post("/api/preset/delete")
+def preset_delete():
+    p = request.get_json(force=True)
+    pid = p.get("preset_id")
+    ok = PE.delete_preset(pid)
+    return R(ok, data={"deleted": ok})
+
+@app.post("/api/preset/export")
+def preset_export():
+    p = request.get_json(force=True)
+    pid = p.get("preset_id")
+    json_str = PE.export_preset_json(pid)
+    return R(True, data={"json_content": json_str})
+
+@app.post("/api/preset/import")
+def preset_import():
+    p = request.get_json(force=True)
+    json_content = p.get("json_content", "")
+    imported = PE.import_preset_json(json_content)
+    return R(True, data={"preset": imported})
+
+# ---------- Advanced Data Cleaning (Stage C - Future 2, Mục 75) ----------
+@app.post("/api/clean/find_replace/preview")
+def clean_find_replace_preview():
+    p = request.get_json(force=True)
+    rec, ti, st = _ctx(p)
+    t = get_table(rec, ti)
+    cols = p.get("columns", [])
+    find_val = str(p.get("find_val", ""))
+    replace_val = str(p.get("replace_val", ""))
+    match_type = p.get("match_type", "contains")
+    case_sensitive = bool(p.get("case_sensitive", False))
+    is_regex = bool(p.get("is_regex", False))
+
+    header = t["rows"][0]
+    col_indices = []
+    for c in cols:
+        if isinstance(c, int) and 0 <= c < len(header):
+            col_indices.append(c)
+        elif isinstance(c, str):
+            for idx, h in enumerate(header):
+                if str(h).strip().lower() == c.strip().lower():
+                    col_indices.append(idx); break
+    if not col_indices:
+        col_indices = list(range(len(header)))
+
+    res = CE.preview_find_replace(t["rows"], col_indices, find_val, replace_val,
+                                  match_type=match_type, case_sensitive=case_sensitive, is_regex=is_regex)
+    if "error" in res:
+        return R(False, errors=[{"code": "INVALID_REGEX", "message": res["error"]}])
+    return R(True, data=res)
+
+@app.post("/api/clean/find_replace/apply")
+def clean_find_replace_apply():
+    p = request.get_json(force=True)
+    rec, ti, st = _ctx(p)
+    t = get_table(rec, ti)
+    cols = p.get("columns", [])
+    find_val = str(p.get("find_val", ""))
+    replace_val = str(p.get("replace_val", ""))
+    match_type = p.get("match_type", "contains")
+    case_sensitive = bool(p.get("case_sensitive", False))
+    is_regex = bool(p.get("is_regex", False))
+    target_mode = p.get("target_mode", "new_table")
+
+    header = t["rows"][0]
+    col_indices = []
+    for c in cols:
+        if isinstance(c, int) and 0 <= c < len(header):
+            col_indices.append(c)
+        elif isinstance(c, str):
+            for idx, h in enumerate(header):
+                if str(h).strip().lower() == c.strip().lower():
+                    col_indices.append(idx); break
+    if not col_indices:
+        col_indices = list(range(len(header)))
+
+    try:
+        new_rows, stats = CE.apply_find_replace(t["rows"], col_indices, find_val, replace_val,
+                                                match_type=match_type, case_sensitive=case_sensitive, is_regex=is_regex)
+    except ValueError as e:
+        return R(False, errors=[{"code": "CLEAN_ERROR", "message": str(e)}])
+
+    chk = CE.independent_cleaning_check(t["rows"], new_rows, "find_replace", strategy=None)
+    if not chk["valid"]:
+        return R(False, errors=[{"code": "CHECK_FAILED", "message": "; ".join(chk["errors"])}])
+
+    if target_mode == "in_place":
+        st.setdefault("undo", []).append({"rows": [list(r) for r in t["rows"]], "action": "find_replace"})
+        st["redo"] = []
+        t["rows"] = new_rows
+        rec.setdefault("cache", {}).pop(ti, None)
+        _log(st, "thay thế văn bản", None, f"{stats['affected_cells']} ô, {stats['affected_rows']} dòng")
+        return R(True, data={"table_index": ti, "stats": stats, "state": _state(rec, ti, st), "mode": "in_place"})
+    else:
+        new_table_name = f"[Thay thế] {t['name']}"
+        new_ti = len(rec["tables"])
+        rec["tables"].append({"name": new_table_name, "rows": new_rows, "derived": {"is_cleaned": True, "ctypes": {}}})
+        rec.setdefault("ops", {})[new_ti] = {"list": [], "undo": [], "redo": [], "log": []}
+        _log(rec["ops"][new_ti], "tạo bảng từ tìm kiếm & thay thế", None, f"{stats['affected_cells']} ô thay đổi")
+        return R(True, data={"table_index": new_ti, "name": new_table_name, "stats": stats, "mode": "new_table"})
+
+@app.post("/api/clean/duplicates/detect")
+def clean_duplicates_detect():
+    p = request.get_json(force=True)
+    rec, ti, st = _ctx(p)
+    t = get_table(rec, ti)
+    cols = p.get("columns", [])
+    mode = p.get("mode", "exact")
+    threshold = float(p.get("threshold", 0.85))
+
+    header = t["rows"][0]
+    col_indices = []
+    for c in cols:
+        if isinstance(c, int) and 0 <= c < len(header):
+            col_indices.append(c)
+        elif isinstance(c, str):
+            for idx, h in enumerate(header):
+                if str(h).strip().lower() == c.strip().lower():
+                    col_indices.append(idx); break
+    if not col_indices:
+        col_indices = list(range(len(header)))
+
+    dup_info = CE.find_duplicates(t["rows"], key_cols=col_indices, mode=mode, threshold=threshold)
+    return R(True, data=dup_info)
+
+@app.post("/api/clean/duplicates/remove")
+def clean_duplicates_remove():
+    p = request.get_json(force=True)
+    rec, ti, st = _ctx(p)
+    t = get_table(rec, ti)
+    cols = p.get("columns", [])
+    mode = p.get("mode", "exact")
+    strategy = p.get("strategy", "keep_first")
+    threshold = float(p.get("threshold", 0.85))
+    target_mode = p.get("target_mode", "new_table")
+
+    header = t["rows"][0]
+    col_indices = []
+    for c in cols:
+        if isinstance(c, int) and 0 <= c < len(header):
+            col_indices.append(c)
+        elif isinstance(c, str):
+            for idx, h in enumerate(header):
+                if str(h).strip().lower() == c.strip().lower():
+                    col_indices.append(idx); break
+    if not col_indices:
+        col_indices = list(range(len(header)))
+
+    new_rows, stats = CE.deduplicate_dataset(t["rows"], key_cols=col_indices, mode=mode, strategy=strategy, threshold=threshold)
+    chk = CE.independent_cleaning_check(t["rows"], new_rows, "deduplicate", strategy=strategy)
+    if not chk["valid"]:
+        return R(False, errors=[{"code": "CHECK_FAILED", "message": "; ".join(chk["errors"])}])
+
+    if target_mode == "in_place":
+        st.setdefault("undo", []).append({"rows": [list(r) for r in t["rows"]], "action": "deduplicate"})
+        st["redo"] = []
+        t["rows"] = new_rows
+        rec.setdefault("cache", {}).pop(ti, None)
+        _log(st, "lọc trùng lặp", None, f"loại bỏ {stats['removed_count']} dòng")
+        return R(True, data={"table_index": ti, "stats": stats, "state": _state(rec, ti, st), "mode": "in_place"})
+    else:
+        new_table_name = f"[Lọc trùng] {t['name']}"
+        new_ti = len(rec["tables"])
+        rec["tables"].append({"name": new_table_name, "rows": new_rows, "derived": {"is_cleaned": True, "ctypes": {}}})
+        rec.setdefault("ops", {})[new_ti] = {"list": [], "undo": [], "redo": [], "log": []}
+        _log(rec["ops"][new_ti], "tạo bảng từ lọc trùng lặp", None, f"loại bỏ {stats['removed_count']} dòng")
+        return R(True, data={"table_index": new_ti, "name": new_table_name, "stats": stats, "mode": "new_table"})
+
+@app.post("/api/clean/format/apply")
+def clean_format_apply():
+    p = request.get_json(force=True)
+    rec, ti, st = _ctx(p)
+    t = get_table(rec, ti)
+    cols = p.get("columns", [])
+    kind = p.get("kind", "text")
+    opts = p.get("options", {})
+    target_mode = p.get("target_mode", "new_table")
+
+    header = t["rows"][0]
+    col_indices = []
+    for c in cols:
+        if isinstance(c, int) and 0 <= c < len(header):
+            col_indices.append(c)
+        elif isinstance(c, str):
+            for idx, h in enumerate(header):
+                if str(h).strip().lower() == c.strip().lower():
+                    col_indices.append(idx); break
+    if not col_indices:
+        return R(False, errors=[{"code": "NO_COLS", "message": "Chưa chọn cột."}])
+
+    new_rows = [list(header)]
+    changed_cells = 0
+    for r_idx in range(1, len(t["rows"])):
+        row = list(t["rows"][r_idx])
+        for c_idx in col_indices:
+            if c_idx >= len(row): continue
+            val = row[c_idx]
+            orig_str = "" if val is None else str(val)
+            new_val = val
+            if kind == "text":
+                new_val = CE.clean_text(val, trim=opts.get("trim", True),
+                                        collapse_spaces=opts.get("collapse_spaces", True),
+                                        case=opts.get("case", "none"),
+                                        unicode_form=opts.get("unicode_form", "NFC"),
+                                        strip_accents=opts.get("strip_accents", False),
+                                        remove_invisible=opts.get("remove_invisible", True))
+            elif kind == "phone":
+                new_val, valid, _ = CE.clean_phone(val, output_format=opts.get("output_format", "vn_standard"))
+            elif kind == "email":
+                new_val, valid, _ = CE.clean_email(val, fix_typo_domain=opts.get("fix_typo", True))
+            elif kind == "number":
+                n, valid, _ = CE.clean_number(val, decimal_sep=opts.get("decimal_sep", "auto"))
+                if valid and n is not None:
+                    new_val = float(n) if "." in str(n) else int(n)
+            elif kind == "currency":
+                c_res = CE.clean_currency(val)
+                if c_res["valid"] and c_res["amount"] is not None:
+                    new_val = float(c_res["amount"]) if "." in str(c_res["amount"]) else int(c_res["amount"])
+            elif kind == "percentage":
+                p_res = CE.clean_percentage(val, as_ratio=opts.get("as_ratio", False))
+                if p_res["valid"] and p_res["value"] is not None:
+                    new_val = float(p_res["value"])
+
+            if str(new_val) != orig_str:
+                changed_cells += 1
+                row[c_idx] = new_val
+        new_rows.append(row)
+
+    stats = {"changed_cells": changed_cells, "affected_rows": len(new_rows) - 1}
+    if target_mode == "in_place":
+        st.setdefault("undo", []).append({"rows": [list(r) for r in t["rows"]], "action": f"clean_{kind}"})
+        st["redo"] = []
+        t["rows"] = new_rows
+        rec.setdefault("cache", {}).pop(ti, None)
+        _log(st, f"chuẩn hóa {kind}", None, f"{changed_cells} ô trong {len(col_indices)} cột")
+        return R(True, data={"table_index": ti, "stats": stats, "state": _state(rec, ti, st), "mode": "in_place"})
+    else:
+        new_table_name = f"[Chuẩn hóa {kind}] {t['name']}"
+        new_ti = len(rec["tables"])
+        rec["tables"].append({"name": new_table_name, "rows": new_rows, "derived": {"is_cleaned": True, "ctypes": {}}})
+        rec.setdefault("ops", {})[new_ti] = {"list": [], "undo": [], "redo": [], "log": []}
+        _log(rec["ops"][new_ti], f"tạo bảng chuẩn hóa {kind}", None, f"{changed_cells} ô thay đổi")
+        return R(True, data={"table_index": new_ti, "name": new_table_name, "stats": stats, "mode": "new_table"})
+
+# ---------- Data Quality Score (Stage C - Future 3, Mục 76) ----------
+@app.get("/api/quality/score")
+def quality_score_api():
+    rec, ti, st = _ctx(request.args)
+    t = get_table(rec, ti)
+    q_res = QE.compute_quality_score(t["rows"])
+    chk_ok, msg = QE.independent_quality_check(t["rows"], q_res["overall_score"])
+    if not chk_ok:
+        return R(False, errors=[{"code": "QUALITY_CHECK_FAILED", "message": msg}])
+    return R(True, data={"quality": q_res})
+
+# ---------- Business Validation Rules (Stage C - Future 4, Mục 77) ----------
+@app.post("/api/business_rules/validate")
+def business_rules_validate():
+    p = request.get_json(force=True)
+    rec, ti, st = _ctx(p)
+    t = get_table(rec, ti)
+    rules = p.get("rules", [])
+    if not rules:
+        return R(False, errors=[{"code": "NO_RULES", "message": "Chưa có quy tắc nào."}])
+
+    res = BR.validate_dataset_rules(t["rows"], rules)
+    chk_ok, msg = BR.independent_rules_check(t["rows"], rules, res)
+    if not chk_ok:
+        return R(False, errors=[{"code": "RULES_CHECK_FAILED", "message": msg}])
+    return R(True, data={"validation_result": res})
+
+# ---------- Data Lineage & Explainability (Stage C - Future 5 & 7, Mục 78 & 80) ----------
+@app.get("/api/lineage/cell")
+def lineage_cell_api():
+    rec, ti, st = _ctx(request.args)
+    t = get_table(rec, ti)
+    row_idx = int(request.args.get("row", 0))
+    col_name = str(request.args.get("col", ""))
+
+    header = t["rows"][0]
+    data_rows = t["rows"][1:]
+    current_val = None
+    if 0 <= row_idx < len(data_rows):
+        row = data_rows[row_idx]
+        for c_idx, h in enumerate(header):
+            if str(h).strip().lower() == col_name.strip().lower():
+                current_val = row[c_idx] if c_idx < len(row) else None
+                break
+
+    ops_list = rec.get("ops", {}).get(ti, {}).get("list", [])
+    lineage_info = LINEAGE.get_cell_lineage(
+        session_id=str(request.args.get("id")),
+        table_idx=ti,
+        row_idx=row_idx,
+        col_name=col_name,
+        current_val=current_val,
+        rows=t["rows"],
+        header=header,
+        ops_list=ops_list,
+        source_name=rec.get("name")
+    )
+    return R(True, data={"lineage": lineage_info})
+
+# ---------- Version History (Stage C - Future 6, Mục 79) ----------
+@app.post("/api/version/create")
+def version_create():
+    p = request.get_json(force=True)
+    rec, ti, st = _ctx(p)
+    t = get_table(rec, ti)
+    label = str(p.get("label", "")).strip()
+    desc = str(p.get("description", "")).strip()
+    sid = str(p.get("id"))
+    v = VERSIONS.create_version(sid, ti, label, desc, t["rows"])
+    _log(st, "tạo phiên bản", None, f"{v['label']} (v{v['version_number']})")
+    return R(True, data={"version": v})
+
+@app.get("/api/version/list")
+def version_list():
+    rec, ti, st = _ctx(request.args)
+    sid = str(request.args.get("id"))
+    versions = VERSIONS.list_versions(sid, ti)
+    return R(True, data={"versions": versions})
+
+@app.post("/api/version/compare")
+def version_compare():
+    p = request.get_json(force=True)
+    sid = str(p.get("id"))
+    va_id = str(p.get("version_a"))
+    vb_id = str(p.get("version_b"))
+    try:
+        diff = VERSIONS.compare_versions(sid, va_id, vb_id)
+        va = VERSIONS.get_version(sid, va_id)
+        vb = VERSIONS.get_version(sid, vb_id)
+        chk_ok, msg = independent_version_check(va, vb, diff)
+        if not chk_ok:
+            return R(False, errors=[{"code": "VERSION_CHECK_FAILED", "message": msg}])
+        return R(True, data={"diff": diff})
+    except ValueError as e:
+        return R(False, errors=[{"code": "COMPARE_ERROR", "message": str(e)}])
+
+@app.post("/api/version/restore")
+def version_restore():
+    p = request.get_json(force=True)
+    rec, ti, st = _ctx(p)
+    sid = str(p.get("id"))
+    vid = str(p.get("version_id"))
+    try:
+        res = VERSIONS.restore_version(sid, vid)
+        st.setdefault("undo", []).append({"rows": [list(r) for r in rec["tables"][ti]["rows"]], "action": "restore_version"})
+        st["redo"] = []
+        rec["tables"][ti]["rows"] = res["rows"]
+        rec.setdefault("cache", {}).pop(ti, None)
+        _log(st, "khôi phục phiên bản", None, res["label"])
+        return R(True, data={"restored_version": vid, "label": res["label"], "state": _state(rec, ti, st)})
+    except ValueError as e:
+        return R(False, errors=[{"code": "RESTORE_ERROR", "message": str(e)}])
+
+# ---------- Quick Analysis & Dashboard (Stage C - Future 8, Mục 81) ----------
+@app.get("/api/analysis/dashboard")
+def analysis_dashboard():
+    rec, ti, st = _ctx(request.args)
+    t = get_table(rec, ti)
+    dash = AE.generate_quick_analysis(t["rows"])
+    chk_ok, msg = AE.independent_analysis_check(t["rows"], dash)
+    if not chk_ok:
+        return R(False, errors=[{"code": "ANALYSIS_CHECK_FAILED", "message": msg}])
+    return R(True, data={"dashboard": dash})
+
+# ---------- Automation & Batch Processing (Stage C - Future 9, 11, 12, Mục 82, 84, 85) ----------
+@app.post("/api/automation/plan")
+def automation_plan():
+    p = request.get_json(force=True)
+    prompt = str(p.get("prompt", "")).strip()
+    cols = p.get("columns", [])
+    plan_res = AUTOMATION.plan_workflow_from_text(prompt, cols)
+    return R(True, data={"plan": plan_res})
+
+@app.post("/api/automation/batch")
+def automation_batch():
+    p = request.get_json(force=True)
+    files_payload = p.get("files", [])
+    preset_id = p.get("preset_id")
+    preset = PE.get_preset(preset_id) if preset_id else p.get("preset", {})
+    batch_res = AUTOMATION.run_batch_preset(files_payload, preset)
+    chk_ok, msg = independent_automation_check(batch_res)
+    if not chk_ok:
+        return R(False, errors=[{"code": "BATCH_CHECK_FAILED", "message": msg}])
+    return R(True, data={"batch_result": batch_res})
+
+@app.post("/api/automation/schedule")
+def automation_schedule():
+    p = request.get_json(force=True)
+    name = str(p.get("name", "Quy trình định kỳ"))
+    preset_id = str(p.get("preset_id", ""))
+    freq = str(p.get("frequency", "daily"))
+    t_str = str(p.get("time", "08:00"))
+    job_id = f"job_{len(AUTOMATION.list_schedules()) + 1}"
+    job = AUTOMATION.create_schedule(job_id, name, preset_id, freq, t_str)
+    return R(True, data={"schedule": job})
+
+@app.get("/api/automation/schedules")
+def automation_schedules_list():
+    return R(True, data={"schedules": AUTOMATION.list_schedules()})
+
+# ---------- Multi-User & RBAC (Stage C - Future 13, Mục 86) ----------
+@app.get("/api/auth/users")
+def auth_users_list():
+    users = RBAC.list_users()
+    return R(True, data={"users": users})
+
+@app.post("/api/auth/users")
+def auth_create_user():
+    p = request.get_json(force=True)
+    u = str(p.get("username", "")).strip()
+    pw = str(p.get("password", "")).strip()
+    role = str(p.get("role", "EDITOR")).strip()
+    fname = str(p.get("full_name", "")).strip()
+    try:
+        created = RBAC.create_user(u, pw, role, fname)
+        return R(True, data={"user": created})
+    except ValueError as e:
+        return R(False, errors=[{"code": "USER_ERROR", "message": str(e)}])
+
+@app.post("/api/auth/login_user")
+def auth_login_user():
+    p = request.get_json(force=True)
+    u = str(p.get("username", "")).strip()
+    pw = str(p.get("password", "")).strip()
+    ok, user, err = RBAC.authenticate(u, pw)
+    if ok and user:
+        session["ok"] = True
+        session["user"] = user["username"]
+        session["role"] = user["role"]
+        session.permanent = True
+        return R(True, data={"user": user})
+    return R(False, errors=[{"code": "AUTH_FAILED", "message": err or "Lỗi"}])
 
 # ---------- Smart Merge (Giai đoạn 5 - Mục 11 đến 18) ----------
 @app.post("/api/merge/schema")

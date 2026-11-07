@@ -1,0 +1,23 @@
+{
+  "preset_41bab1a7c1": {
+    "id": "preset_41bab1a7c1",
+    "name": "Tính đơn hàng",
+    "description": "",
+    "steps": [
+      {
+        "id": "rule_001",
+        "type": "FORMULA",
+        "target": "Thành tiền",
+        "expression": "[Số lượng] * [Đơn giá]",
+        "enabled": true
+      }
+    ],
+    "column_requirements": [
+      "Số lượng",
+      "Đơn giá"
+    ],
+    "created_at": "2026-11-08 00:54:03",
+    "updated_at": "2026-11-08 00:54:03",
+    "version": 1
+  }
+}

@@ -6,7 +6,7 @@ env = dict(os.environ);
 env["PYTHONIOENCODING"] = "utf-8"
 env["PYTHONUTF8"] = "1"
 if "--fast" in sys.argv: env["DATADESK_FAST"] = "1"
-names = ["test_units", "test_golden", "test_formula", "test_rules", "test_pipeline", "test_normalize", "test_schema", "test_merge_api", "test_merge_engine", "test_export", "test_validation", "test_audit", "test_integration", "test_core", "test_ui"]; res = []
+names = ["test_units", "test_golden", "test_formula", "test_rules", "test_pipeline", "test_preset", "test_cleaning_engine", "test_quality_engine", "test_business_rules", "test_lineage", "test_version_engine", "test_analysis_engine", "test_automation_engine", "test_rbac_engine", "test_normalize", "test_schema", "test_merge_api", "test_merge_engine", "test_export", "test_validation", "test_audit", "test_integration", "test_core", "test_ui"]; res = []
 for n in names:
     t0 = time.time(); p = subprocess.run([sys.executable, os.path.join("tests", n + ".py")], cwd=root, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace")
     last = [l for l in (p.stdout + p.stderr).splitlines() if l.strip()][-1:] or [""]

@@ -2,7 +2,10 @@ import os, sys
 need = [
     "server.py", "engine.py", "engine.cpp", "formula.py", "rules.py",
     "pipeline.py", "normalize.py", "schema.py", "merge_engine.py",
-    "export.py", "validate_engine.py", "requirements.txt",
+    "export.py", "validate_engine.py", "preset_engine.py", "cleaning_engine.py",
+    "quality_engine.py", "business_rules.py", "lineage_engine.py",
+    "version_engine.py", "analysis_engine.py", "automation_engine.py",
+    "rbac_engine.py", "requirements.txt",
     "static/index.html", "static/login.html"
 ]
 miss = [f for f in need if not os.path.exists(f)]
