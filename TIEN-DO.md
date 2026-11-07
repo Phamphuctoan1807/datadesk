@@ -258,3 +258,42 @@ Kết quả hiện tại: **Toàn bộ 24/24 bộ kiểm thử ĐẠT 100% SẠC
   - Bổ sung Card Quản lý phiên bản dữ liệu (`card-versioning`): Tạo bản chụp snapshot kèm tên/mô tả, xem danh sách và khôi phục (Restore) tức thì.
   - Bổ sung Card Phân tích thống kê & Báo cáo nhanh (`card-analysis`): Chạy phân tích tự động, hiển thị các thẻ KPI (Tổng, Trung bình, Min, Max), nhận diện kiểu cột.
   - Bổ sung Card Truy vết nguồn gốc (`card-lineage`): Tra cứu nguồn gốc từng ô dữ liệu qua toàn bộ các bước biến đổi trong quy trình.
+
+
+## 🦾 Nâng cấp Siêu Giao diện Không gian Công nghệ: J.A.R.V.I.S. Hologram Edition
+Đã hoàn thành xuất sắc việc hiện thực hóa toàn bộ bản thiết kế không gian tương tác vũ trụ dữ liệu 3D/2.5D (J.A.R.V.I.S. Hologram Canvas) lấy cảm hứng từ Iron Man HUD, biến mọi tính năng trong Roadmap thành các module điều khiển tương tác trực quan:
+
+1. **Ngôn ngữ Thiết kế Stark HUD & Bảng Màu Quang Học:**
+   - **Bioluminescent Palette:** `#030712` Deep Void Canvas kết hợp `#00f0ff` (Arc Cyan), `#2457f5` (Tesseract Blue), `#a855f7` (Quantum Purple), `#f59e0b` (Amber Synapse), `#ff2a5f` (Crimson Alert), `#00ff9d` (Emerald Verified).
+   - **Chamfered Tech Borders:** Khung vát góc $45^\circ$ (`clip-path: polygon(...)`) trên toàn bộ Node cột, Lõi trung tâm, Thanh HUD, Bản đồ chiến thuật và các Modal.
+   - **Reticle Corner Brackets & Scanlines:** Vạch chia độ viền ở 4 góc và hiệu ứng quét sáng scanline quang học.
+   - **Micro-Telemetry HUD Banner:** Hiển thị tọa độ chuột thời gian thực $(X, Y)$, bộ đếm FPS ($60.0$), số lượng cáp năng lượng hoạt động và trạng thái động cơ `C++ v2026 Core | Python Validator Ready | Status: NOMINAL`.
+   - **Web Audio Synthesizer (`AudioFX`):** Xây dựng bộ tổng hợp âm thanh thuần bằng Web Audio API của trình duyệt (không tải bất kỳ file MP3 ngoài nào) với các hiệu ứng `beep` (tần số cao), `hum` (nạp điện cáp), `lock` (khóa ngàm cơ khí), `scan` (quét laser), `shield` (hợp âm kiểm chứng kép) và `alarm` (báo động xung đột). Đi kèm công tắc bật/tắt âm thanh `SFX BẬT/TẮT` có ghi nhớ trạng thái.
+
+2. **Lò Phản Ứng Hồ Quang (Arc Reactor Core) & Hố Đen Hút File:**
+   - Trước khi tải file, vùng kéo thả `#drop` hiển thị Lò phản ứng gồm 3 vòng tròn đồng tâm xoay ngược chiều kèm các ký hiệu toán học ($\sum, \Delta, \pi, \infty, \lambda, 01$).
+   - Khi kéo file lại gần tâm: Lò phản ứng tăng tốc độ xoay gấp 3 lần, phát sáng rực rỡ và tạo lực hút từ trường kéo các hạt số liệu xung quanh tụ về tâm rơi.
+   - Khi thả file: Kích hoạt **J.A.R.V.I.S. Diagnostic Bubble 3 lớp** quét radar $360^\circ$ và hiệu ứng giải mã ký tự Matrix: `[ĐANG ĐỌC CẤU TRÚC VẬT LÝ...]` ➔ `[BỘ XỬ LÝ C++ ĐANG LẬP CHỈ MỤC...]` ➔ `[HOÀN TẤT RÀ SOÁT]`.
+
+3. **Node Cột Không Bao Giờ Đứt Dây & Vật Lý Nghiêng 3D (Elastic Streams & 3D Tilt):**
+   - Trạng thái thu gọn: Hiển thị viên nang công nghệ với Tên cột, Kiểu dữ liệu và Huy hiệu tỷ lệ giá trị duy nhất `% Unique Ratio` (Mục 13).
+   - Trạng thái mở rộng: Trượt dài xuống theo chiều dọc với hiệu ứng xuất hiện tuần tự các phần tử `[STT] ── [Tên Cột] ── [Giá trị]`.
+   - Kéo thả vật lý nghiêng 3D: Khi nắm kéo cột đi khắp không gian, cột tự động nghiêng theo gia tốc kéo (`perspective(600px) rotateX(...) rotateY(...) scale(1.04)`) và nảy đàn hồi về trạng thái phẳng khi thả chuột.
+   - Đường dây điện SVG Bezier năng lượng nối từ Lõi file trung tâm tới ổ cắm cột tự động uốn cong mềm mại với xung điện chạy rần rật, tuyệt đối không bao giờ đứt dây.
+
+4. **Công Cụ "Con Mắt Thần" (Cyber-Eye Inspector) & "Kính Lúp Lượng Tử" (Quantum Magnifier):**
+   - **Cyber-Eye:** Kéo thả hoặc bấm để khóa ngàm hít từ tính vào đầu cột bất kỳ, trượt ra thanh quét Laser. Gõ ký tự tới đâu, các dòng không khớp sẽ thu gọn chiều cao về $0$ và tan biến dần dần theo từng phím gõ.
+   - **Quantum Magnifier & Cross-Column Synapse:** Nhập từ khóa truy tìm, các tia điện màu Vàng Hoàng Kim (`#f59e0b`) tự động phóng xuyên không gian nối các ô khớp nhau giữa các cột đang mở. Bấm `[TRUY TÌM]` triệu hồi **Bảng Hồ Sơ 3D (3D Entity Dossier)** liệt kê chi tiết mọi thuộc tính và lịch sử nguồn gốc.
+
+5. **Bộ Module Thí Nghiệm & Đồ Chơi Công Nghệ (Iron Man Gadgets):**
+   - **Lò Rèn Công Thức (Formula Forge):** Đấu nối cáp dữ liệu từ 2 cột nguồn vào ổ cắm, xoay Vòng đĩa toán tử (`*`, `+`, `-`, `/`, `CONCAT`, `ROUND`, `IF`) kèm cảnh báo tự động khi chia cho 0 (`DIV_ZERO`). Bấm `[RÈN CÔNG THỨC]` tạo ngay cột mới vào `ST.formulas` và bảng dữ liệu.
+   - **Trạm Phân Luồng Logic (Prism Logic Gate):** Thiết kế lăng kính quang học tách luồng dữ liệu thành 2 nhánh `THEN` (xanh lục) và `ELSE` (tím), cập nhật thời gian thực số lượng dòng thỏa mãn và kích hoạt quy tắc vào `ST.rules`.
+   - **Buồng Khử Nhiễm Dữ Liệu (Decontamination Chamber):** Tùy chọn chuẩn hóa Họ tên, Số điện thoại, Khoảng trắng thừa và ô trống giả. Bấm kích hoạt sẽ phóng **Tia Laser Quét Dọc Không Gian** làm sạch dữ liệu và hiện thông báo Hologram Toast.
+   - **Trục Thời Gian Năng Lượng (Time-Stream Conduit):** Thanh trục năng lượng ở đáy màn hình hiển thị toàn bộ tiến trình biến đổi, tích hợp đèn báo phụ thuộc vòng (`CIRCULAR DEPENDENCY`) và nút Hoàn tác/Làm lại trực tiếp.
+   - **Khiên Kiểm Chứng Độc Lập (Twin-Engine Verification Shield):** Khi bấm `[Xuất file]`, hiển thị màn hình 2 Lõi Động Cơ Đối Xứng (**C++ Core** và **Python Validator**) chạy qua danh sách kiểm tra đối chiếu số dòng, số cột, sai số từng ô ($< 10^{-9}$), bảo toàn màu sắc và đóng dấu chứng nhận `100% SAFE - VERIFIED` trước khi tải file.
+
+6. **Các Tiện Ích Bổ Trợ (Sci-Fi Utilities):**
+   - **Bản Đồ Radar Thu Nhỏ (Tactical Minimap):** Hiển thị ở góc dưới bên phải với tọa độ Lõi trung tâm, các Node cột và khung nhìn camera; hỗ trợ bấm vào minimap để lia nhanh không gian.
+   - **Nút "Dàn Đội Hình" (Auto-Formation Layout):** Một chạm đưa toàn bộ các cột bay về xếp theo hình **Vòng Cung (Arc Formation)** hoặc **Ma Trận Lưới (Matrix Grid)** trật tự.
+   - **Trợ Lý Lệnh Nhanh J.A.R.V.I.S. (`Ctrl+K`):** Thanh lệnh nổi ở đỉnh màn hình với sóng âm thanh Hologram và các chip lệnh gợi ý tự động.
+   - **Chuyển Đổi Không Gian "Nghiêm Túc" ⟷ "Công Nghệ" (Dimension Shift):** Gạt công tắc chuyển đổi mượt mà giữa chế độ bảng biểu văn phòng truyền thống và không gian Hologram, đồng bộ dữ liệu `ST` tuyệt đối 100%.
