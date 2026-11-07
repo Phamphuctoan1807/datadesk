@@ -10,7 +10,7 @@ h1{font-size:21px;margin:0 0 4px}p{margin:0 0 18px;color:#5d6b7d;font-size:13.5p
 .w{display:flex;gap:8px}input{flex:1;min-width:0;font:inherit;border:1px solid #d9e0e9;border-radius:8px;padding:11px 12px}
 .s{border:1px solid #d9e0e9;background:#fff;border-radius:8px;padding:0 12px;cursor:pointer;font:inherit;color:#5d6b7d}
 .go{width:100%;margin-top:12px;background:#2457f5;color:#fff;border:0;border-radius:8px;padding:12px;font:inherit;font-weight:700;cursor:pointer}
-.go:disabled{opacity:.6}#m{color:#b3261e;min-height:1.3em;margin:10px 0 0;font-size:13.5px}:focus-visible{outline:2px solid #2457f5;outline-offset:2px}
+.go:disabled{opacity:.6}.v{color:#5d6b7d;font-size:12px;margin:14px 0 0;text-align:center}#m{color:#b3261e;min-height:1.3em;margin:10px 0 0;font-size:13.5px}:focus-visible{outline:2px solid #2457f5;outline-offset:2px}
 [hidden]{display:none!important}
 .ov{position:fixed;inset:0;background:rgba(15,27,45,.9);display:grid;place-items:center;padding:16px;z-index:10}
 .md{background:#fff;border-radius:12px;padding:30px 28px;width:100%;max-width:380px;text-align:center}
@@ -20,9 +20,10 @@ h1{font-size:21px;margin:0 0 4px}p{margin:0 0 18px;color:#5d6b7d;font-size:13.5p
 <h2 id="ot">Chào mừng bạn</h2><p>Đây là dự án của <b>Toàn Phạm</b>.</p><button class="go" id="ok" type="button">Đã hiểu, tiếp tục</button></div></div>
 <form class="c" id="f" hidden><div class="logo">D</div><h1>DataDesk</h1><p>Trang riêng tư. Nhập mật khẩu để tiếp tục.</p>
 <div class="w"><input id="p" type="password" autocomplete="current-password" placeholder="Mật khẩu" required><button type="button" class="s" id="t">Hiện</button></div>
-<button class="go" id="b">Đăng nhập</button><p id="m" role="alert"></p></form>
+<button class="go" id="b">Đăng nhập</button><p id="m" role="alert"></p><p class="v" id="ver"></p></form>
 <script>
 const f=document.getElementById('f'),p=document.getElementById('p'),m=document.getElementById('m'),b=document.getElementById('b');
+fetch('/version').then(r=>r.json()).then(d=>{document.getElementById('ver').textContent='Phiên bản '+d.version}).catch(()=>{});
 const ov=document.getElementById('ov'),ok=document.getElementById('ok');
 function closeIntro(){ov.remove();f.hidden=false;p.focus()}
 ok.onclick=closeIntro;ok.focus();document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.getElementById('ov'))closeIntro()});

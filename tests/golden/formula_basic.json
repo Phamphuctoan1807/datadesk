@@ -1,0 +1,2 @@
+{"dataset": "orders.csv", "ops": [{"id": "rule_001", "type": "FORMULA", "target": "Thành tiền", "expression": "[Số lượng] * [Đơn giá]", "enabled": true}],
+ "expect": {"columns": ["Mã", "Số lượng", "Đơn giá", "Thành tiền"], "cells": [{"row": 2, "col": "Thành tiền", "value": 100000}, {"row": 3, "col": "Thành tiền", "value": 250000}, {"row": 4, "col": "Thành tiền", "value": 0}], "warnings": 0, "errors": {}}}

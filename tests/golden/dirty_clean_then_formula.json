@@ -1,0 +1,3 @@
+{"dataset": "dirty_data.csv", "ops": [{"id": "rule_001", "type": "CONDITIONAL", "enabled": true, "name": "lam sach", "when": {"logic": "AND", "items": [{"column": "Điểm", "operator": "=", "value": "N/A"}]}, "then": [{"type": "set_value", "target": "Điểm", "value": "0", "value_type": "number"}], "else": []},
+  {"id": "rule_002", "type": "FORMULA", "target": "Gấp đôi", "expression": "[Điểm] * 2", "enabled": true}],
+ "expect": {"cells": [{"row": 2, "col": "Gấp đôi", "value": 10}, {"row": 3, "col": "Gấp đôi", "value": 0}, {"row": 4, "col": "Gấp đôi", "value": 14}], "errors": {"rule_001": {}, "rule_002": {}}, "warnings": 0}}

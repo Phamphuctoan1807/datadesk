@@ -1,0 +1,68 @@
+{
+ "dataset": "dates_mixed.csv",
+ "ops": [
+  {
+   "id": "rule_001",
+   "type": "NORMALIZE",
+   "enabled": true,
+   "name": "",
+   "kind": "date",
+   "columns": [
+    "Ngày"
+   ],
+   "mode": "replace",
+   "options": {
+    "order": "auto"
+   }
+  }
+ ],
+ "expect": {
+  "cells": [
+   {
+    "row": 2,
+    "col": "Ngày",
+    "value": "2026-03-13"
+   },
+   {
+    "row": 3,
+    "col": "Ngày",
+    "value": "2026-03-05"
+   },
+   {
+    "row": 4,
+    "col": "Ngày",
+    "value": "2026-03-01"
+   },
+   {
+    "row": 5,
+    "col": "Ngày",
+    "value": "2026-03-05"
+   },
+   {
+    "row": 6,
+    "col": "Ngày",
+    "value": "31/02/2026"
+   },
+   {
+    "row": 7,
+    "col": "Ngày",
+    "value": "abc"
+   },
+   {
+    "row": 9,
+    "col": "Ngày",
+    "value": "2026-04-07"
+   },
+   {
+    "row": 11,
+    "col": "Ngày",
+    "value": "2024-02-29"
+   }
+  ],
+  "errors": {
+   "rule_001": {
+    "INVALID_DATE": 2
+   }
+  }
+ }
+}

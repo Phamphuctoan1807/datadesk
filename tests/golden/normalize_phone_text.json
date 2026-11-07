@@ -1,0 +1,91 @@
+{
+ "dataset": "phones.csv",
+ "ops": [
+  {
+   "id": "rule_001",
+   "type": "NORMALIZE",
+   "enabled": true,
+   "name": "ten",
+   "kind": "text",
+   "columns": [
+    "Tên"
+   ],
+   "mode": "replace",
+   "options": {
+    "case": "title"
+   }
+  },
+  {
+   "id": "rule_002",
+   "type": "NORMALIZE",
+   "enabled": true,
+   "name": "sdt",
+   "kind": "phone",
+   "columns": [
+    "SĐT"
+   ],
+   "mode": "replace",
+   "options": {
+    "format": "vn"
+   }
+  }
+ ],
+ "expect": {
+  "cells": [
+   {
+    "row": 2,
+    "col": "Tên",
+    "value": "Nguyễn Văn A"
+   },
+   {
+    "row": 3,
+    "col": "Tên",
+    "value": "Trần Thị B"
+   },
+   {
+    "row": 4,
+    "col": "Tên",
+    "value": "Lê C"
+   },
+   {
+    "row": 2,
+    "col": "SĐT",
+    "value": "0912345678"
+   },
+   {
+    "row": 3,
+    "col": "SĐT",
+    "value": "0913456789"
+   },
+   {
+    "row": 4,
+    "col": "SĐT",
+    "value": "0913456780"
+   },
+   {
+    "row": 5,
+    "col": "SĐT",
+    "value": "0914567890"
+   },
+   {
+    "row": 6,
+    "col": "SĐT",
+    "value": "abc"
+   },
+   {
+    "row": 7,
+    "col": "SĐT",
+    "value": "02431234567"
+   }
+  ],
+  "errors": {
+   "rule_001": {},
+   "rule_002": {
+    "INVALID_PHONE": 1
+   }
+  },
+  "warnings_contain": [
+   "không chuẩn hóa được"
+  ]
+ }
+}

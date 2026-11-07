@@ -593,6 +593,10 @@ def same(e, g):
         try: x = float(g)
         except (TypeError, ValueError): return False
         return abs(x - float(e)) <= max(1e-9, 1e-9 * abs(float(e)))
+    if isinstance(e, dt.datetime):
+        if isinstance(g, dt.datetime): return g == e
+        if isinstance(g, str): return g == dstr(e) and not (e.hour or e.minute or e.second)
+        return isinstance(g, dt.date) and dt.datetime(g.year, g.month, g.day) == e
     if isinstance(e, dt.date):
         if isinstance(g, dt.datetime): return g.date() == e
         return g == e if isinstance(g, dt.date) else g == dstr(e)

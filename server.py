@@ -7,6 +7,8 @@ from engine import Engine, text_keys, nat
 import formula as FX
 import rules as RL
 import pipeline as PL
+import normalize as NZ
+import schema as SC
 import openpyxl
 from openpyxl.styles import PatternFill, Font
 from openpyxl.utils import get_column_letter
@@ -21,7 +23,7 @@ app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax",
                   SESSION_COOKIE_SECURE=os.environ.get("COOKIE_SECURE") == "1", PERMANENT_SESSION_LIFETIME=8 * 3600)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
 FAILS = {}
-VERSION = "2026.10.09-gd3.2"  # hiện ở góc trên giao diện và tại /version để biết bản nào đang chạy
+VERSION = "2026.10.10-gd5.0"  # hiện ở góc trên giao diện và tại /version để biết bản nào đang chạy
 RED = "#FF5C5C"  # màu đỏ dùng khi đánh dấu thiếu sót
 AI_KEY = os.environ.get("AI_API_KEY", "").strip()  # bỏ khoảng trắng/xuống dòng dán nhầm
 AI_URL = (os.environ.get("AI_BASE_URL") or "https://generativelanguage.googleapis.com/v1beta/openai").strip().rstrip("/")  # biến để trống thì dùng mặc định
@@ -192,15 +194,70 @@ def info(t, hdr):
     dup = len(body) - len({json.dumps([disp(x) for x in r]) for r in body})
     return {"name": t["name"], "n_rows": len(body), "n_cols": W, "dropped": t["dropped"], "dup": dup,
             "empty": sum(c["empty"] for c in cols), "colored": sum(1 for r in (t.get("sf") or [])[1 if hdr else 0:] for x in r if x), "header": hdr, "columns": cols,
+            "hints": NZ.hints([c["name"] for c in cols], [[r[c] for r in body[:2000]] for c in range(W)], [c["type"] for c in cols], "auto", to_num, to_date),
             "preview": [[disp(x) for x in r] for r in rows[:8]]}
 
 @app.post("/api/analyze")
 def analyze():
-    gc(); f = request.files.get("file")
-    if not f: raise ValueError("Chưa có file được gửi lên.")
-    T = parse(f.filename or "file", f.read())
-    sid = uuid.uuid4().hex; STORE[sid] = {"t": time.time(), "tables": T, "name": f.filename}
-    return jsonify(id=sid, name=f.filename, tables=[info(t, guess_header(t)) for t in T])
+    gc()
+    uploaded_files = request.files.getlist("files") or request.files.getlist("file")
+    if not uploaded_files:
+        raise ValueError("Chưa có file được gửi lên.")
+    all_tables = []
+    datasets = []
+    names = []
+    for f in uploaded_files:
+        if not f.filename:
+            continue
+        data = f.read()
+        if not data:
+            continue
+        T = parse(f.filename or "file", data)
+        start_idx = len(all_tables)
+        all_tables.extend(T)
+        end_idx = len(all_tables)
+        datasets.append({
+            "name": f.filename,
+            "table_indices": list(range(start_idx, end_idx)),
+            "tables_count": len(T),
+        })
+        names.append(f.filename)
+    if not all_tables:
+        raise ValueError("Không đọc được bảng dữ liệu nào từ file gửi lên.")
+    sid = uuid.uuid4().hex
+    main_name = " + ".join(names) if len(names) > 1 else names[0]
+    STORE[sid] = {
+        "t": time.time(),
+        "tables": all_tables,
+        "name": main_name,
+        "datasets": datasets,
+    }
+    return jsonify(id=sid, name=main_name, tables=[info(t, guess_header(t)) for t in all_tables], datasets=datasets)
+
+@app.post("/api/merge/add_file")
+def merge_add_file():
+    gc()
+    sid = request.form.get("id") or request.args.get("id")
+    rec = STORE.get(sid)
+    if not rec:
+        raise ValueError("Phiên làm việc đã hết hạn, hãy tải file lên lại.")
+    f = request.files.get("file")
+    if not f or not f.filename:
+        raise ValueError("Chưa chọn file để thêm vào.")
+    data = f.read()
+    if not data:
+        raise ValueError("File tải lên rỗng.")
+    T = parse(f.filename or "file", data)
+    start_idx = len(rec["tables"])
+    rec["tables"].extend(T)
+    end_idx = len(rec["tables"])
+    ds = rec.setdefault("datasets", [])
+    ds.append({
+        "name": f.filename,
+        "table_indices": list(range(start_idx, end_idx)),
+        "tables_count": len(T),
+    })
+    return jsonify(id=sid, added_file=f.filename, tables=[info(t, guess_header(t)) for t in rec["tables"]], datasets=ds)
 
 @app.get("/api/rows")
 def rows_page():
@@ -460,7 +517,11 @@ def _status(s_, warnings=(), confirm=False):  # SAFE / REVIEW_REQUIRED (mục 56
 def _log(st, action, op=None, detail="", affected=None, decision="tự động"):  # nhật ký thao tác (audit log), chỉ giữ trong bộ nhớ phiên
     st.setdefault("log", []).append({"time": time.strftime("%Y-%m-%d %H:%M:%S"), "action": action, "op_id": (op or {}).get("id"), "op_type": (op or {}).get("type", "FORMULA") if op else None,
                                       "detail": str(detail)[:200], "affected_rows": affected, "decision": decision}); del st["log"][:-100]
-def _opsum(o): return ("%s = %s" % (o.get("target"), o.get("expression"))) if o.get("type", "FORMULA") == "FORMULA" else (o.get("name") or o.get("id"))
+def _opsum(o):
+    t = o.get("type", "FORMULA")
+    if t == "FORMULA": return "%s = %s" % (o.get("target"), o.get("expression"))
+    if t == "NORMALIZE": return "%s: %s" % (NZ.KIND_VN.get(o.get("kind"), o.get("kind")), ", ".join(o.get("columns") or []))
+    return o.get("name") or o.get("id")
 
 def _state(rec, ti, st):
     try: get_table(rec, ti)
@@ -504,7 +565,7 @@ def _op_response(act, rec, ti, st, L, op, p):
     if op.get("type", "FORMULA") == "FORMULA":
         stats = {"rows": s_["rows"], "formula_errors": sum(s_["errors"].values())}; affected = s_["rows"]
         data = _preview_data(d, oid) if act == "preview" else {"refs": d["refs"][oid]}
-    else:
+    else:  # quy tắc điều kiện hoặc chuẩn hóa: so bảng trước và sau để báo ô đổi, ô ghi đè
         if not p.get("op_id"):  # thêm mới: bảng trước đó chính là bảng hiện tại, dùng lại bản đã tính để khỏi tính hai lần
             try: bt = get_table(rec, ti); base, bf = bt["rows"], (bt.get("cfills") or {})
             except ValueError: base, bf = rec["tables"][ti]["rows"], {}
@@ -515,9 +576,17 @@ def _op_response(act, rec, ti, st, L, op, p):
         data = {"matched": s_["matched"], "errors": s_["errors"], "overwritten": df["overwritten"], "new_columns": s_["created"], "changed_cells": df["changed"],
                 "colored_cells": len(set(nf.items()) - set(bf.items())), "columns": df["columns"], "rows": df["rows"]}
         stats = {"rows": s_["rows"], "matched": s_["matched"]}
+        if op.get("type") == "NORMALIZE":
+            probs = []
+            for e in d["errlog"]:
+                if e["op_id"] == oid and len(probs) < 12:
+                    ex, fx = _FIX.get(e["code"], ("giá trị hợp lệ", "Kiểm tra lại ô này."))
+                    probs.append({"row": e["row"] + 2, "inputs": e["inputs"], "code": e["code"], "fix": fx})
+            data.update({k: s_[k] for k in ("changed", "unchanged", "invalid", "review", "empty")}); data["problems"] = probs
+            stats = {"rows": s_["rows"], "changed": s_["changed"], "invalid": s_["invalid"], "review": s_["review"]}
         if act == "apply" and conf and not p.get("confirm"):
             stt, why = _status(s_, d["warnings"], True)
-            return R(False, data=dict(data, status=stt, status_reason=why), errors=[{"code": "NEEDS_CONFIRM", "message": "Quy tắc sẽ ghi đè %d ô đang có dữ liệu (chỉ trong kết quả, file gốc không đổi). Hãy xem trước; nếu đồng ý thì xác nhận." % df["overwritten"]}])
+            return R(False, data=dict(data, status=stt, status_reason=why), errors=[{"code": "NEEDS_CONFIRM", "message": "Bước này sẽ ghi đè %d ô đang có dữ liệu (chỉ trong kết quả, file gốc không đổi). Hãy xem trước; nếu đồng ý thì xác nhận." % df["overwritten"]}])
     stt, why = _status(s_, d["warnings"], conf)
     if act == "apply":
         edit = bool(p.get("op_id")); _commit(st, L); _cache_put(rec, ti, L, d)
@@ -564,6 +633,26 @@ def _rule_list(p, st):
         op = dict({"id": "rule_%03d" % (1 + max([int(o["id"].split("_")[1]) for o in L] or [0])), "type": "CONDITIONAL", "enabled": True}, **f); L.append(op)
     return L, op
 
+def _norm_list(p, st):
+    if not p.get("header"): raise ValueError('Chuẩn hóa cần dòng tiêu đề để gọi tên cột. Hãy bật "Dòng đầu tiên là tiêu đề".')
+    r = p.get("norm") or {}
+    f = {"name": str(r.get("name", ""))[:80], "kind": r.get("kind"), "columns": [str(c) for c in (r.get("columns") or [])][:NZ.MAXCOLS + 5],
+         "mode": "new_column" if r.get("mode") == "new_column" else "replace", "options": r.get("options") or {}}
+    L = json.loads(json.dumps(st["list"])); oid = p.get("op_id")
+    if oid:
+        op = next((o for o in L if o["id"] == oid), None)
+        if not op: raise ValueError("Không tìm thấy bước chuẩn hóa cần sửa.")
+        op.update(f); op["enabled"] = True
+    else:
+        op = dict({"id": "rule_%03d" % (1 + max([int(o["id"].split("_")[1]) for o in L] or [0])), "type": "NORMALIZE", "enabled": True}, **f); L.append(op)
+    return L, op
+
+@app.post("/api/normalize/<act>")
+def normalize_api(act):
+    if act not in ("validate", "preview", "apply"): raise ValueError("Không có thao tác này.")
+    p = request.get_json(force=True); rec, ti, st = _ctx(p); L, op = _norm_list(p, st)
+    return _op_response(act, rec, ti, st, L, op, p)
+
 @app.post("/api/rule/<act>")
 def rule_api(act):
     if act not in ("validate", "preview", "apply"): raise ValueError("Không có thao tác này.")
@@ -581,6 +670,7 @@ def transform_api(act):
         o = p.get("op") or {}; typ = o.get("type")
         if typ == "FORMULA": L, op = _formula_list(dict(p, target=o.get("target"), expression=o.get("expression")), st)
         elif typ == "CONDITIONAL": L, op = _rule_list(dict(p, rule=o), st)
+        elif typ == "NORMALIZE": L, op = _norm_list(dict(p, norm=o), st)
         else: raise ValueError("Loại biến đổi %s chưa được hỗ trợ." % typ)
         return _op_response(act, rec, ti, st, L, op, p)
     if act in ("undo", "redo"):
@@ -610,7 +700,15 @@ _FIX = {"ERROR_DIV_ZERO": ("mẫu số khác 0", "Dùng IF(mẫu số = 0, giá 
         "ERROR_TYPE": ("kiểu dữ liệu đúng với phép tính (số, ngày hoặc chữ)", "Làm sạch ô sai kiểu (quy tắc thay thế chữ hoặc xóa dữ liệu) hoặc chọn lại Cách đọc số."),
         "ERROR_NULL": ("ô có dữ liệu", "Dùng ISEMPTY([cột]) để xử lý ô trống hoặc điền dữ liệu còn thiếu."),
         "ERROR_DATE": ("ngày hợp lệ", "Kiểm tra số ngày cộng hoặc trừ và định dạng ngày."),
-        "ERROR_OVERFLOW": ("kết quả trong giới hạn tính toán", "Kiểm tra giá trị quá lớn hoặc phép lũy thừa.")}
+        "ERROR_OVERFLOW": ("kết quả trong giới hạn tính toán", "Kiểm tra giá trị quá lớn hoặc phép lũy thừa."),
+        "INVALID_PHONE": ("số điện thoại Việt Nam: 10 số bắt đầu 03/05/07/08/09, hoặc 11 số bắt đầu 02", "Sửa tay ô này hoặc bỏ ký tự lạ. Số 9 chữ số mất số 0 đầu sẽ được tự thêm 0."),
+        "INVALID_EMAIL": ("địa chỉ email dạng ten@ten-mien.com", "Sửa tay ô này: thiếu @, có dấu cách giữa chữ hoặc tên miền sai."),
+        "INVALID_NUMBER": ("số hợp lệ (có thể có dấu ngăn nghìn, ₫, VND)", "Sửa tay ô này. Ô có dấu % hãy dùng chuẩn hóa phần trăm."),
+        "INVALID_DATE": ("ngày hợp lệ dạng ngày/tháng/năm hoặc năm-tháng-ngày", "Sửa tay ô này (ví dụ ngày 31/02 không tồn tại, năm cần đủ 4 chữ số)."),
+        "AMBIGUOUS_NUMBER": ("giá trị số rõ ràng", 'Chọn "Cách đọc số" ở phần Quy trình biến đổi rồi xem lại.'),
+        "AMBIGUOUS_DATE": ("thứ tự ngày tháng rõ ràng", "Chọn thứ tự ngày tháng (ngày/tháng hoặc tháng/ngày) trong biểu mẫu chuẩn hóa ngày."),
+        "AMBIGUOUS_PERCENT": ("giá trị có dấu %", "Thêm dấu % vào ô hoặc nhập dạng thập phân (0,1 tương ứng 10%)."),
+        "INVALID_TEXT": ("chữ hợp lệ", "Kiểm tra lại ô này.")}
 
 def _error_rows(rec, ti, errlog):
     t = rec["tables"][ti]; out = []
@@ -636,6 +734,104 @@ def validate_api():  # kiểm tra toàn bộ quy trình như khi xuất nhưng k
     p = dict(request.get_json(force=True)); p["_dry"] = True; r = _process(p)
     return R(r["ok"], data={"checks": r["checks"], "status": r["status"], "total": r["total"]},
              errors=[{"code": "CHECK_FAILED", "message": "%s: %s" % (k["t"], k["d"])} for k in r["checks"] if not k["ok"]])
+
+# ---------- Smart Merge (Giai đoạn 5 - Mục 11 đến 18) ----------
+@app.post("/api/merge/schema")
+def merge_schema():
+    p = request.get_json(silent=True) or {}
+    rec = STORE.get(p.get("id"))
+    if not rec:
+        raise ValueError("Phiên làm việc đã hết hạn, hãy tải file lên lại.")
+    ti = int(p.get("table", 0))
+    if ti >= len(rec["tables"]):
+        return R(False, errors=[{"code": "INVALID_TABLE_INDEX", "message": "Chỉ số bảng không tồn tại."}])
+    t = get_table(rec, ti)
+    hdr = p.get("header")
+    if hdr is None:
+        hdr = guess_header(t) or bool(t.get("derived"))
+    else:
+        hdr = bool(hdr)
+    rows = t["rows"]
+    if not rows:
+        return R(False, errors=[{"code": "EMPTY_TABLE", "message": "Bảng dữ liệu rỗng."}])
+    if hdr:
+        headers = [disp(c).strip() or ("Cột %d" % (j + 1)) for j, c in enumerate(rows[0])]
+        body = rows[1:]
+    else:
+        headers = ["Cột %d" % (j + 1) for j in range(len(rows[0]))]
+        body = rows
+    schema_data = SC.detect_schema(t["name"], headers, body)
+    return R(True, data=schema_data)
+
+@app.post("/api/merge/analyze")
+def merge_analyze():
+    p = request.get_json(silent=True) or {}
+    rec = STORE.get(p.get("id"))
+    if not rec:
+        raise ValueError("Phiên làm việc đã hết hạn, hãy tải file lên lại.")
+    ti_a = int(p.get("table_a", 0))
+    ti_b = int(p.get("table_b", 1))
+    if ti_a >= len(rec["tables"]) or ti_b >= len(rec["tables"]):
+        return R(False, errors=[{"code": "INVALID_TABLE_INDEX", "message": "Chỉ số bảng không tồn tại trong phiên."}])
+    t_a = get_table(rec, ti_a)
+    t_b = get_table(rec, ti_b)
+    hdr_a = guess_header(t_a) or bool(t_a.get("derived"))
+    hdr_b = guess_header(t_b) or bool(t_b.get("derived"))
+    headers_a = [disp(c).strip() or ("Cột %d" % (j + 1)) for j, c in enumerate(t_a["rows"][0])] if hdr_a else ["Cột %d" % (j + 1) for j in range(len(t_a["rows"][0]))]
+    body_a = t_a["rows"][1:] if hdr_a else t_a["rows"]
+    headers_b = [disp(c).strip() or ("Cột %d" % (j + 1)) for j, c in enumerate(t_b["rows"][0])] if hdr_b else ["Cột %d" % (j + 1) for j in range(len(t_b["rows"][0]))]
+    body_b = t_b["rows"][1:] if hdr_b else t_b["rows"]
+    schema_a = SC.detect_schema(t_a["name"], headers_a, body_a)
+    schema_b = SC.detect_schema(t_b["name"], headers_b, body_b)
+    weights = p.get("weights")
+    thresholds = p.get("thresholds")
+    matching = SC.match_schemas(schema_a, schema_b, weights=weights, thresholds=thresholds)
+    validation = SC.independent_match_check(schema_a, schema_b, matching["mappings"])
+    stats = {
+        "table_a_columns": len(headers_a),
+        "table_b_columns": len(headers_b),
+        "matched_columns": len(matching["mappings"]),
+        "safe_matches": sum(1 for m in matching["mappings"] if m["status"] == "SAFE"),
+        "review_matches": sum(1 for m in matching["mappings"] if m["status"] == "REVIEW_REQUIRED"),
+        "unsafe_matches": sum(1 for m in matching["mappings"] if m["status"] == "UNSAFE"),
+    }
+    data = {
+        "schema_a": schema_a,
+        "schema_b": schema_b,
+        "matching": matching,
+        "validation": validation,
+        "recommendation": matching["recommendation"],
+    }
+    warnings = []
+    if matching["recommendation"]["mode"] == "REVIEW_REQUIRED":
+        warnings.append("Cần xem xét cấu trúc hai bảng để quyết định chế độ gộp dữ liệu.")
+    if stats["review_matches"] > 0:
+        warnings.append("Có %d cặp cột cần người dùng xác nhận trước khi ghép." % stats["review_matches"])
+    return R(True, data=data, stats=stats, warnings=warnings)
+
+@app.post("/api/merge/mapping")
+def merge_mapping():
+    p = request.get_json(silent=True) or {}
+    rec = STORE.get(p.get("id"))
+    if not rec:
+        raise ValueError("Phiên làm việc đã hết hạn, hãy tải file lên lại.")
+    ti_a = int(p.get("table_a", 0))
+    ti_b = int(p.get("table_b", 1))
+    mappings = p.get("mappings") or []
+    t_a = get_table(rec, ti_a)
+    t_b = get_table(rec, ti_b)
+    hdr_a = guess_header(t_a) or bool(t_a.get("derived"))
+    hdr_b = guess_header(t_b) or bool(t_b.get("derived"))
+    headers_a = [disp(c).strip() or ("Cột %d" % (j + 1)) for j, c in enumerate(t_a["rows"][0])] if hdr_a else ["Cột %d" % (j + 1) for j in range(len(t_a["rows"][0]))]
+    body_a = t_a["rows"][1:] if hdr_a else t_a["rows"]
+    headers_b = [disp(c).strip() or ("Cột %d" % (j + 1)) for j, c in enumerate(t_b["rows"][0])] if hdr_b else ["Cột %d" % (j + 1) for j in range(len(t_b["rows"][0]))]
+    body_b = t_b["rows"][1:] if hdr_b else t_b["rows"]
+    schema_a = SC.detect_schema(t_a["name"], headers_a, body_a)
+    schema_b = SC.detect_schema(t_b["name"], headers_b, body_b)
+    validation = SC.independent_match_check(schema_a, schema_b, mappings)
+    if not validation["valid"]:
+        return R(False, errors=[{"code": "INVALID_MAPPING", "message": err} for err in validation["errors"]], warnings=validation["warnings"])
+    return R(True, data={"valid": True, "mappings": mappings}, warnings=validation["warnings"])
 
 # ---------- đăng nhập và bảo mật ----------
 @app.before_request
@@ -682,7 +878,7 @@ def robots(): return "User-agent: *\nDisallow: /\n", 200, {"Content-Type": "text
 def config(): return jsonify(ai=bool(AI_KEY), engine="C++" if E.native else "Python", version=VERSION)
 
 @app.get("/version")
-def version(): return jsonify(version=VERSION, engine="C++" if E.native else "Python", features=["formula", "rules", "pipeline", "audit", "validate", "formula-ai"])
+def version(): return jsonify(version=VERSION, engine="C++" if E.native else "Python", features=["formula", "rules", "normalize", "pipeline", "audit", "validate", "formula-ai"])
 
 # ---------- gợi ý từ AI (API miễn phí, chuẩn OpenAI) ----------
 OPSET = {"contains", "eq", "gt", "lt", "empty", "notempty", "dup"}

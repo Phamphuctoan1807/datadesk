@@ -3,7 +3,7 @@
 ## Các file
 - `engine.cpp`: bộ xử lý C++ (đọc số/ngày, sắp xếp nhiều cấp, phát hiện trùng, so sánh số)
 - `engine.py`: cầu nối Python gọi C++ (ctypes). Chưa biên dịch C++ thì tự dùng bản Python dự phòng
-- `formula.py`, `rules.py`, `pipeline.py`: công thức, quy tắc điều kiện và quy trình biến đổi (kèm bộ kiểm tra độc lập)
+- `formula.py`, `rules.py`, `normalize.py`, `pipeline.py`, `schema.py`: công thức, quy tắc điều kiện, chuẩn hóa dữ liệu, lược đồ và khớp cột gộp file (kèm các bộ kiểm tra độc lập)
 - `check_files.py`: kiểm tra đủ file khi build trên Render
 - `tests/`: bộ kiểm thử (không cần cho việc chạy web)
 - `TIEN-DO.md`: đối chiếu với lộ trình
@@ -73,12 +73,12 @@ Trang giờ nói rõ nguyên nhân. Cách xử lý theo từng thông báo:
 - Dữ liệu mẫu gửi cho AI có thể bị nhà cung cấp mô hình miễn phí ghi nhận. Đặt `AI_SAMPLE_ROWS=0` nếu dữ liệu nhạy cảm.
 
 ## 8. Kiểm tra bản mới đã chạy chưa
-1. Mở `https://tên-của-bạn.onrender.com/version` (không cần đăng nhập). Phải thấy `"version": "2026.10.09-gd3.2"` hoặc số mới hơn. Không thấy hoặc thấy số cũ nghĩa là web chưa được cập nhật.
+1. Mở `https://tên-của-bạn.onrender.com/version` (không cần đăng nhập). Phải thấy `"version": "2026.10.10-gd4.1"` hoặc số mới hơn. Không thấy hoặc thấy số cũ nghĩa là web chưa được cập nhật.
 2. Sau khi đăng nhập, góc trên bên phải có chữ `Bộ xử lý: C++ | v2026...` (trên điện thoại nằm hàng dưới tên DataDesk). Trang đăng nhập cũng ghi "Phiên bản ..." ở cuối.
-3. Các mục mới (Quy trình biến đổi, Thêm công thức, Thêm quy tắc điều kiện) **chỉ hiện sau khi bạn tải một file lên**, nằm ngay dưới phần "Kết quả rà soát".
+3. Các mục mới (Quy trình biến đổi, Làm sạch và chuẩn hóa dữ liệu, Thêm công thức, Thêm quy tắc điều kiện) **chỉ hiện sau khi bạn tải một file lên**, nằm ngay dưới phần "Kết quả rà soát".
 4. Nếu vẫn là bản cũ, vào Render, mục **Events**: xem lần deploy mới nhất là Live hay Failed. Mục **Logs** nếu lỗi sẽ ghi "THIEU FILE: ..." (thiếu file nào) hoặc lỗi cài đặt.
    Render **giữ nguyên bản cũ đang chạy** khi bản mới build lỗi, nên web trông như không đổi gì.
-5. Nguyên nhân hay gặp: chỉ tải lên vài file thay vì tất cả (thiếu `formula.py`, `rules.py`, `pipeline.py`, `check_files.py`); tải nguyên file `.zip` lên GitHub mà chưa giải nén; file nằm trong thư mục con `datadesk/` nên `Dockerfile` không nằm ở ngoài cùng; tắt Auto-Deploy (khi đó bấm Manual Deploy).
+5. Nguyên nhân hay gặp: chỉ tải lên vài file thay vì tất cả (thiếu `formula.py`, `rules.py`, `normalize.py`, `pipeline.py`, `check_files.py`); tải nguyên file `.zip` lên GitHub mà chưa giải nén; file nằm trong thư mục con `datadesk/` nên `Dockerfile` không nằm ở ngoài cùng; tắt Auto-Deploy (khi đó bấm Manual Deploy).
 
 ## 9. Cập nhật thư mục tests trên GitHub
 Thư mục `tests` chỉ để kiểm thử trên máy bạn. **Web trên Render không cần nó** (đã loại khỏi bản build bằng `.dockerignore`), nên không cập nhật cũng không ảnh hưởng web. Muốn đưa lên GitHub để lưu cùng dự án:
@@ -94,4 +94,4 @@ pip install -r requirements.txt
 python tests/make_datasets.py
 python tests/run_all.py --fast
 ```
-Cuối bảng phải ghi `TỔNG: 8/8 bộ đạt`. `test_ui` cần thêm `pip install playwright` rồi `playwright install chromium`; chưa cài thì bộ này tự bỏ qua và vẫn tính là đạt.
+Cuối bảng phải ghi `TỔNG: 9/9 bộ đạt`. `test_ui` cần thêm `pip install playwright` rồi `playwright install chromium`; chưa cài thì bộ này tự bỏ qua và vẫn tính là đạt.

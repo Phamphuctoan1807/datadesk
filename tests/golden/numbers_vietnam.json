@@ -1,0 +1,2 @@
+{"dataset": "numbers.csv", "numfmt": "vi", "ops": [{"id": "rule_001", "type": "FORMULA", "target": "B", "expression": "[Mơ hồ] * 1", "enabled": true}],
+ "expect": {"cells": [{"row": 2, "col": "B", "value": 1234}, {"row": 3, "col": "B", "value": 2500}, {"row": 5, "col": "B", "value": 1000}], "warnings": 0, "errors": {"rule_001": {}}}}

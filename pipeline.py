@@ -4,7 +4,7 @@ bằng bộ tính Decimal riêng từ dữ liệu gốc và so với giá trị,
 import re, datetime as dt
 from collections import Counter
 from decimal import localcontext, Context
-import formula as F, rules as RL
+import formula as F, rules as RL, normalize as NZ
 
 def ctype_of(vals):
     v = [x for x in vals if x != "" and not (isinstance(x, str) and x.startswith("ERROR_"))]
@@ -12,11 +12,29 @@ def ctype_of(vals):
     if v and all(isinstance(x, dt.datetime) for x in v): return "date"
     return "text"
 
+def _tv(x):  # giá trị thô -> giá trị có kiểu (cùng quy ước với bộ nhớ đệm T)
+    if x is None or (isinstance(x, str) and not x.strip()): return None
+    if isinstance(x, bool): return x
+    if isinstance(x, (int, float)): return float(x)
+    if isinstance(x, dt.datetime): return x.date()
+    if isinstance(x, dt.date): return x
+    return x if isinstance(x, str) else str(x)
+
+def _soft(lst):  # kiểu cột sau chuẩn hóa: từ 75% ô đọc được là số hoặc ngày thì coi là cột số hoặc ngày
+    nb = [v for v in lst if v is not None]
+    if not nb: return "text"
+    if sum(isinstance(v, dt.date) for v in nb) / len(nb) >= .75: return "date"
+    if sum(isinstance(v, float) for v in nb) / len(nb) >= .75: return "number"
+    return "text"
+
 def _later_targets(ops):
     """Tên cột sẽ được tạo ở từng bước, để báo lỗi dễ hiểu khi công thức dùng cột được tạo ở bước sau."""
     out = {}
     for k, o in enumerate(ops):
         if o.get("type", "FORMULA") == "FORMULA": out.setdefault(F.norm(o.get("target", "")), k + 1)
+        elif o.get("type") == "NORMALIZE":
+            if o.get("mode") == "new_column":
+                for c in o.get("columns") or []: out.setdefault(F.norm("%s (chuẩn hóa)" % c), k + 1)
         else:
             for a in (o.get("then") or []) + (o.get("else") or []):
                 if a.get("type") in ("set_value", "mark", "add_to_list") and a.get("target"): out.setdefault(F.norm(a["target"]), k + 1)
@@ -24,14 +42,14 @@ def _later_targets(ops):
 
 def run_pipeline(t, ops, numfmt, env):
     ops = [o for o in ops if o.get("enabled", True)]
-    other = [o for o in ops if o.get("type", "FORMULA") not in ("FORMULA", "CONDITIONAL")]
+    other = [o for o in ops if o.get("type", "FORMULA") not in ("FORMULA", "CONDITIONAL", "NORMALIZE")]
     if other: return {"errors": [{"code": "UNSUPPORTED_OP", "message": "Loại biến đổi %s chưa được hỗ trợ." % other[0].get("type"), "op_id": other[0].get("id")}]}
     detect, pn, pd, to_num, to_date, disp = (env[k] for k in ("detect", "pn", "pd", "to_num", "to_date", "disp"))
     rows0 = t["rows"]; W0 = len(rows0[0]); body0 = rows0[1:]; n = len(body0)
     names0 = [disp(x).strip() or "Cột %d" % (c + 1) for c, x in enumerate(rows0[0])]
     types0 = [detect([r[c] for r in body0]) for c in range(W0)]
     rows = [list(r) for r in rows0]; names = list(names0); ctypes = list(types0); protected = set()
-    T, INFO, warned, stats, warnings, errlog, events, steps, fmt_cols, refs, fcols = {}, {}, set(), {}, [], [], [], [], {}, {}, []
+    T, INFO, warned, stats, warnings, errlog, events, steps, fmt_cols, refs, fcols, cell_fmt = {}, {}, set(), {}, [], [], [], [], {}, {}, [], {}
     def typed(c):  # giá trị có kiểu của cột c, tính từ dữ liệu GỐC rồi được các bước vá dần
         if c not in T: T[c], INFO[c] = F.typed_column([r[c] for r in body0], ctypes[c], pn, pd, numfmt)
         return T[c]
@@ -48,7 +66,7 @@ def run_pipeline(t, ops, numfmt, env):
         return lst
     later = _later_targets(ops); groups = []
     for k, o in enumerate(ops):
-        kind = "formula" if o.get("type", "FORMULA") == "FORMULA" else "rules"
+        kind = {"FORMULA": "formula", "CONDITIONAL": "rules", "NORMALIZE": "normalize"}[o.get("type", "FORMULA")]
         if groups and groups[-1][0] == kind: groups[-1][1].append(o)
         else: groups.append((kind, [o]))
     for kind, gops in groups:
@@ -67,6 +85,44 @@ def run_pipeline(t, ops, numfmt, env):
                 fmt_cols[j] = "dd/mm/yyyy" if c["date"] else None; fcols.append({"id": c["id"], "target": c["target"]})
             stats.update(d["stats"]); errlog.extend(d["errlog"]); warnings.extend(d["warnings"]); refs.update(d["refs"])
             steps.append({"kind": "formula", "cols": [{"id": c["id"], "target": c["target"], "ast": c["ast"]} for c in d["cols"]]})
+        elif kind == "normalize":
+            for op in gops:
+                try: sp = NZ.compile_spec(op, names, ctypes, protected)
+                except NZ.NormError as e:
+                    m = re.search(r'cột "([^"]+)" không tồn tại', e.msg); msg = e.msg
+                    if e.code == "ERROR_COLUMN" and m and F.norm(m.group(1)) in later: msg += " Cột này được tạo ở bước %d, sau bước dùng nó: hãy đổi thứ tự các bước." % later[F.norm(m.group(1))]
+                    return {"errors": [{"code": e.code, "message": msg, "op_id": e.op_id}]}
+                steps.append({"kind": "normalize", "op": op, "names": list(names), "ctypes": list(ctypes), "protected": sorted(protected)})
+                idx = {}
+                for j in range(len(names) - 1, -1, -1): idx[F.norm(names[j])] = j
+                st = {"changed": 0, "unchanged": 0, "invalid": 0, "review": 0, "empty": 0, "overwritten": 0, "created": list(sp["created"].values()), "rows": n}; errs = Counter(); logged = 0
+                fmt = "dd/mm/yyyy" if sp["kind"] == "date" else ("0.##%" if sp["kind"] == "percentage" else None)
+                for col in sp["columns"]:
+                    c = idx[F.norm(col)]; vals = [rows[i + 1][c] for i in range(n)]
+                    res = NZ.norm_column(sp["kind"], vals, sp["opts"], numfmt, to_num, to_date)
+                    if sp["mode"] == "new_column":
+                        j = len(names); nn = sp["created"][col]; rows[0].append(nn); names.append(nn); tl = []
+                        for i, (new, status, code) in enumerate(res):
+                            out = new if status in ("changed", "unchanged") else vals[i]  # không chuẩn hóa được thì giữ nguyên giá trị gốc
+                            rows[i + 1].append(out); tl.append(_tv(out))
+                            if fmt and isinstance(out, (dt.datetime, int, float)) and not isinstance(out, bool): cell_fmt[(i + 1, j)] = fmt
+                        T[j] = tl; ctypes.append(_soft(tl))
+                    else:
+                        lst = typed(c)
+                        for i, (new, status, code) in enumerate(res):
+                            if status == "changed":
+                                if not NZ.blank(vals[i]): st["overwritten"] += 1
+                                rows[i + 1][c] = new; lst[i] = _tv(new)
+                                if fmt: cell_fmt[(i + 1, c)] = fmt
+                        ctypes[c] = _soft(lst)
+                    for i, (new, status, code) in enumerate(res):
+                        st[status] += 1
+                        if code:
+                            errs[code] += 1
+                            if logged < 100: logged += 1; errlog.append({"op_id": op["id"], "target": "Chuẩn hóa: %s" % col, "row": i, "code": code, "inputs": "%s = %s" % (col, F._show(vals[i]))})
+                st["errors"] = dict(errs); st["matched"] = st["changed"]; stats[op["id"]] = st
+                if st["review"]: warnings.append('Bước chuẩn hóa "%s": %d ô chưa rõ định dạng (ví dụ 1.234, 05/03/2026) nên CHƯA được chuẩn hóa. Hãy chọn Cách đọc số hoặc thứ tự ngày tháng rồi xem lại.' % (sp["label"], st["review"]))
+                if st["invalid"]: warnings.append('Bước chuẩn hóa "%s": %d ô không chuẩn hóa được, đã giữ nguyên; xem Báo cáo lỗi.' % (sp["label"], st["invalid"]))
         else:
             meta = {"kind": "rules", "rules": gops, "names": list(names), "ctypes": list(ctypes), "protected": sorted(protected)}
             res = RL.apply_rules(rows, names, ctypes, protected, gops, typed, T, to_num, to_date)
@@ -84,6 +140,7 @@ def run_pipeline(t, ops, numfmt, env):
         else: fills[(i, c)] = col
     fm0 = t["fm"] or [[None] * W0 for _ in rows0]; add = W - W0
     FM = [fm0[0] + [None] * add] + [fm0[i + 1] + [fmt_cols.get(j) for j in range(W0, W)] for i in range(n)]
+    for (r_, c_), f_ in cell_fmt.items(): FM[r_][c_] = f_
     SF = [t["sf"][i] + [None] * add for i in range(n + 1)] if t.get("sf") else None
     ctf = {j: ctype_of([r[j] for r in rows[1:]]) for j in range(W0, W)}
     view = {"name": t["name"], "dropped": t["dropped"], "rows": rows, "fm": FM, "sf": SF, "cfills": fills,
@@ -131,6 +188,28 @@ def independent_pipeline_check(dv, outidx, cols, got, gfill, pos, high, final_na
                         except F.Raise as e: vals.append(e.code)  # ô công thức lỗi hiện mã lỗi dạng chữ, giống bộ xử lý chính
                     newcols[F.norm(c["target"])] = vals
                 for k, vals in newcols.items(): state[k] = vals; fraw[k] = vals
+            elif st["kind"] == "normalize":
+                try: sp = NZ.compile_spec(st["op"], st["names"], st["ctypes"], set(st["protected"]))
+                except NZ.NormError as e: return 0, [], 0, ["không dịch lại được bước chuẩn hóa: " + e.msg]
+                def itv(x):
+                    if x is None or (isinstance(x, str) and not x.strip()): return None
+                    if isinstance(x, F.D): return x
+                    if isinstance(x, bool): return x
+                    if isinstance(x, (int, float)): return F.D(repr(float(x)))
+                    if isinstance(x, dt.datetime): return x.date()
+                    return x
+                for col in sp["columns"]:
+                    k = F.norm(col); vals = [rawcell(k, i) for i in range(n)]
+                    res = NZ.inorm_column(sp["kind"], vals, sp["opts"], numfmt, to_num, to_date)
+                    if sp["mode"] == "new_column":
+                        nk = F.norm(sp["created"][col]); created_set.add(nk); rawv[nk] = {}; tl = []
+                        for i, (new, status, code) in enumerate(res):
+                            o_ = new if status in ("changed", "unchanged") else vals[i]; rawv[nk][i] = o_; tl.append(itv(o_))
+                        state[nk] = tl
+                    else:
+                        lst = colget(k); rawv.setdefault(k, {})
+                        for i, (new, status, code) in enumerate(res):
+                            if status == "changed": rawv[k][i] = new; lst[i] = itv(new)
             else:
                 try: comp = RL.compile_rules(st["rules"], st["names"], st["ctypes"], set(st["protected"]), to_num, to_date)
                 except RL.RuleError as e: return 0, [], 0, ["không dịch lại được quy tắc: " + e.msg]

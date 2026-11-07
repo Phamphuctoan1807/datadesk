@@ -1,5 +1,5 @@
 import os, sys
-need = ["server.py", "engine.py", "engine.cpp", "formula.py", "rules.py", "pipeline.py", "requirements.txt", "static/index.html", "static/login.html"]
+need = ["server.py", "engine.py", "engine.cpp", "formula.py", "rules.py", "pipeline.py", "normalize.py", "schema.py", "requirements.txt", "static/index.html", "static/login.html"]
 miss = [f for f in need if not os.path.exists(f)]
 if miss:
     print("THIEU FILE: " + ", ".join(miss))

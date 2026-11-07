@@ -1,0 +1,2 @@
+{"dataset": "orders.csv", "ops": [{"id": "rule_001", "type": "FORMULA", "target": "Tỷ lệ", "expression": "[Đơn giá] / [Số lượng]", "enabled": true}],
+ "expect": {"cells": [{"row": 2, "col": "Tỷ lệ", "value": 4000}, {"row": 4, "col": "Tỷ lệ", "value": "ERROR_DIV_ZERO"}], "errors": {"rule_001": {"ERROR_DIV_ZERO": 1}}}}
