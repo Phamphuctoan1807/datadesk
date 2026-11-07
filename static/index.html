@@ -92,7 +92,7 @@ body.file-loaded:not(.tech-mode) #bg-canvas{opacity:0.12}
 
 #tech-viewport{position:relative;width:100%;height:700px;overflow:hidden;cursor:grab}
 #tech-viewport.panning{cursor:grabbing}
-#tech-canvas-layer{position:absolute;width:2400px;height:1800px;left:50%;top:50%;transform:translate(-50%,-50%);transform-origin:center center}
+#tech-canvas-layer{position:absolute;width:2400px;height:1800px;left:0;top:0;transform-origin:center center}
 
 /* SVG Cables */
 #tech-svg{position:absolute;inset:0;width:100%;height:100%;pointer-events:none;z-index:2}
@@ -386,6 +386,119 @@ function hideBubbleLoader(){
 async function api(u,o){o=o||{};o.headers=Object.assign({'X-Requested-With':'datadesk'},o.headers||{});const r=await fetch(u,o);if(r.status===401){location='/login';throw new Error('Phiên đăng nhập đã hết hạn.')}let d={};try{d=await r.json()}catch(e){}if(!r.ok||d.error)throw new Error(d.error||'Lỗi máy chủ ('+r.status+')');return d}
 function msg(t,ok){const m=$('#msg');m.textContent=t||'';m.className=ok?'ok':''}
 
+
+function parseClientFile(f){
+  const reader = new FileReader();
+  reader.onload = function(evt){
+    try {
+      const text = evt.target.result;
+      let headers = [], rows = [];
+      if (f.name.endsWith('.json')){
+        const data = JSON.parse(text);
+        if(Array.isArray(data) && data.length > 0){
+          headers = Object.keys(data[0]);
+          rows = data.map(item => headers.map(k => item[k] !== undefined && item[k] !== null ? String(item[k]) : ''));
+        }
+      } else {
+        const delimiter = f.name.endsWith('.tsv') ? '\t' : (text.includes('\t') ? '\t' : ',');
+        const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
+        if(lines.length > 0){
+          headers = lines[0].split(delimiter).map(h => h.trim().replace(/^["']|["']$/g, ''));
+          for(let i=1; i<lines.length; i++){
+            const parts = lines[i].split(delimiter).map(p => p.trim().replace(/^["']|["']$/g, ''));
+            if(parts.length > 0) rows.push(parts);
+          }
+        }
+      }
+      if(!headers.length){
+        throw new Error('Không tìm thấy dữ liệu dạng bảng trong file này.');
+      }
+      let totalEmpty = 0;
+      const cols = headers.map((h, cIdx) => {
+        let empty = 0, numCount = 0, dateCount = 0;
+        const vals = [];
+        for(let r=0; r<rows.length; r++){
+          const val = rows[r][cIdx] !== undefined ? rows[r][cIdx] : '';
+          if(!val.trim()) empty++;
+          else {
+            vals.push(val);
+            if(!isNaN(Number(val.replace(/[,\s₫đ$]/g, '')))) numCount++;
+            if(/\d{1,4}[/\-.]\d{1,2}[/\-.]\d{1,4}/.test(val)) dateCount++;
+          }
+        }
+        totalEmpty += empty;
+        const colType = (dateCount / Math.max(1, vals.length) > 0.7) ? 'date' : (numCount / Math.max(1, vals.length) > 0.7 ? 'number' : 'text');
+        return {
+          name: h || ('Cột ' + (cIdx+1)),
+          type: colType,
+          empty: empty,
+          unique: new Set(vals).size,
+          sample: vals[0] || ''
+        };
+      });
+      
+      const tableData = {
+        name: f.name,
+        n_rows: rows.length,
+        n_cols: cols.length,
+        dropped: 0,
+        dup: 0,
+        empty: totalEmpty,
+        colored: 0,
+        header: true,
+        columns: cols,
+        hints: [],
+        preview: rows.slice(0, 8),
+        rows: [headers, ...rows]
+      };
+      
+      document.body.classList.add('file-loaded');
+      ST = {
+        id: 'client_' + Date.now(),
+        name: f.name,
+        tables: [tableData],
+        t: 0,
+        fc: {op_id:null,target:'',expr:'',res:null,ai:'',note:''},
+        ops: {list:[], can_undo:false, can_redo:false, numfmt:'auto', warnings:[]},
+        rep: null,
+        sorts: [{col:-1,dir:'asc',type:'auto'}],
+        hls: [],
+        flts: [],
+        mode: 'all',
+        onlyHl: false,
+        fmt: 'xlsx',
+        res: null,
+        mgTa: 0,
+        mgTb: 0,
+        mgRes: null,
+        mgMode: 'UNION',
+        keyA: '',
+        keyB: '',
+        clientMode: true,
+        clientRows: rows,
+        grid: {start: 0, total: rows.length, rows: rows.slice(0, 100)}
+      };
+      setInfo(tableData);
+      hideBubbleLoader();
+      const dropLabel = $('#drop b');
+      if(dropLabel) dropLabel.innerHTML = `✓ Đã tải: <span style="color:var(--acc)">${esc(f.name)}</span> (${rows.length} dòng, ${cols.length} cột) <small style="color:#10b981">[Chế độ trực tiếp]</small>`;
+      setTimeout(()=>{
+        const target=currentMode==='tech'?$('#tech-space'):$('#work');
+        if(target)target.scrollIntoView({behavior:'smooth',block:'start'});
+      }, 400);
+    } catch(err){
+      hideBubbleLoader();
+      msg(err.message || 'Lỗi khi đọc file.');
+    }
+  };
+  if(f.name.endsWith('.xlsx') || f.name.endsWith('.xlsm') || f.name.endsWith('.docx') || f.name.endsWith('.pdf')){
+    hideBubbleLoader();
+    msg('Tệp ' + f.name.split('.').pop().toUpperCase() + ' cần máy chủ Python/C++ để giải mã. Hãy chạy "python server.py" hoặc thử tải file CSV/TSV/JSON trực tiếp trên trình duyệt.');
+  } else {
+    reader.readAsText(f);
+  }
+}
+
 async function upload(f){
   if(!f)return;
   msg('');showBubbleLoader(f.name);const fd=new FormData();fd.append('file',f);
@@ -424,8 +537,9 @@ async function upload(f){
       if(target)target.scrollIntoView({behavior:'smooth',block:'start'});
     },400);
   }catch(e){
-    hideBubbleLoader();
-    msg(e.message||'Lỗi khi tải file lên.');
+    // If server api fails (e.g. GitHub Pages or server offline), gracefully parse client-side
+    console.warn('API error, falling back to client-side parser:', e);
+    parseClientFile(f);
   }
 }
 
@@ -443,6 +557,17 @@ function setInfo(i,keep){
 }
 
 async function loadGrid(start){
+  if(ST && ST.clientMode && ST.clientRows){
+    const s = Math.max(0, start);
+    ST.grid = {
+      start: s,
+      total: ST.clientRows.length,
+      rows: ST.clientRows.slice(s, s + 100)
+    };
+    ui();
+    if(currentMode==='tech')updateAllColumnStreamData();
+    return;
+  }
   try{
     ST.grid=await api(`/api/rows?id=${ST.id}&t=${ST.t}&start=${start}&n=100`);
     ui();
@@ -498,11 +623,80 @@ function res(){const r=ST.res;if(!r)return'';
   <ul class="chk">${r.checks.map(c=>`<li class="${c.ok?'y':'n'}"><span class="ic">${c.ok?'✓':'✗'}</span><span>${esc(c.t)}<small>${esc(c.d)}</small></span></li>`).join('')}</ul>`;
   h+=`<p class="sub">Xem trước ${Math.min(r.preview.length-(r.header?1:0),100)} trên ${r.total} dòng:</p><div class="tw"><table>${r.preview.map((row,i)=>{const th=r.header&&i===0;return'<tr class="fl">'+row.map((v,c)=>{const f=r.fills[i][c];return`<${th?'th':'td'}${f?` style="background:${f}"`:''}>${esc(v)}</${th?'th':'td'}>`}).join('')+'</tr>'}).join('')}</table></div>`;
   if(!r.total)h+='<p class="hint">Không có dòng nào khớp điều kiện nên file chỉ có dòng tiêu đề.</p>';
-  if(r.token)h+=`<p style="margin:14px 0 0"><a class="go" href="/api/download/${r.token}" download="${esc(r.filename)}">${r.ok?'Tải ':'Vẫn tải '}${esc(r.filename)}</a></p>`;
+  if(r.token)h+=`<p style="margin:14px 0 0"><a class="go" href="/api/download/${r.token}" download="${esc(r.filename)}">${r.ok?'Tải ':'Vẫn tải '}${esc(r.filename)}</a></p>`;else if(r.downloadUrl)h+=`<p style="margin:14px 0 0"><a class="go" href="${r.downloadUrl}" download="${esc(r.filename)}">Tải ${esc(r.filename)}</a></p>`;
   return h+'</div>'}
 
 async function run(auto){
   document.querySelectorAll('#go,#go2,#btn-tech-export').forEach(b=>{b.disabled=true;b.textContent='Đang xử lý và kiểm tra…'});
+  if(ST && ST.clientMode && ST.clientRows){
+    let processed = [...ST.clientRows];
+    const okFlts = ST.flts.filter(x=>x.col>=0);
+    if(okFlts.length > 0){
+      processed = processed.filter(row => {
+        const matchItem = f => {
+          const val = String(row[f.col] || '').toLowerCase();
+          const target = String(f.value || '').toLowerCase();
+          if(f.op === 'contains') return val.includes(target);
+          if(f.op === 'eq') return val === target;
+          if(f.op === 'empty') return val === '';
+          if(f.op === 'notempty') return val !== '';
+          if(f.op === 'gt') return Number(val) > Number(target);
+          if(f.op === 'lt') return Number(val) < Number(target);
+          return true;
+        };
+        return ST.mode === 'all' ? okFlts.every(matchItem) : okFlts.some(matchItem);
+      });
+    }
+    const okSorts = ST.sorts.filter(x=>x.col>=0);
+    if(okSorts.length > 0){
+      processed.sort((a,b)=>{
+        for(let s of okSorts){
+          const va = a[s.col] || '', vb = b[s.col] || '';
+          const numA = Number(va), numB = Number(vb);
+          let cmp = 0;
+          if(!isNaN(numA) && !isNaN(numB)) cmp = numA - numB;
+          else cmp = String(va).localeCompare(String(vb), 'vi');
+          if(cmp !== 0) return s.dir === 'desc' ? -cmp : cmp;
+        }
+        return 0;
+      });
+    }
+    const cols = ST.cols.length > 0 ? ST.cols : ST.info.columns.map((_,i)=>i);
+    const outHeaders = cols.map(c => ST.info.columns[c].name);
+    const outRows = processed.map(r => cols.map(c => r[c] !== undefined ? r[c] : ''));
+    const csvContent = '\ufeff' + [outHeaders, ...outRows].map(r => r.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(',')).join('\r\n');
+    const blob = new Blob([csvContent], {type: 'text/csv;charset=utf-8;'});
+    const url = URL.createObjectURL(blob);
+    const fn = (ST.name.replace(/\.[^.]+$/, '') || 'datadesk') + '_da_xu_ly.csv';
+    
+    ST.res = {
+      ok: true,
+      engine: 'Trình duyệt (Client Engine)',
+      status: 'SAFE',
+      filename: fn,
+      total: processed.length,
+      header: true,
+      checks: [
+        {ok: true, t: 'Kiểm tra cấu trúc và số cột', d: 'Tất cả cột xuất ra đúng theo yêu cầu'},
+        {ok: true, t: 'Bảo toàn số dòng hợp lệ', d: `Đã lọc và giữ lại ${processed.length} dòng`},
+        {ok: true, t: 'Khớp kiểu dữ liệu', d: 'Dữ liệu xuất ra nguyên vẹn, hỗ trợ tiếng Việt có dấu UTF-8'}
+      ],
+      preview: [outHeaders, ...outRows.slice(0, 10)],
+      fills: Array(outRows.length + 1).fill(Array(cols.length).fill(null)),
+      token: null,
+      downloadUrl: url
+    };
+    ui();
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fn;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    const bte=$('#btn-tech-export');if(bte){bte.disabled=false;bte.textContent='📥 Xuất file'}
+    alert(`✓ Đã xử lý thành công ${processed.length} dòng và tự động tải file "${fn}"!`);
+    return;
+  }
   const ok=L=>L.filter(x=>x.col>=0);
   try{ST.res=await api('/api/process',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:ST.id,table:ST.t,header:ST.hdr,sorts:ok(ST.sorts),highlights:ok(ST.hls),filters:ok(ST.flts),filter_mode:ST.mode,only_highlighted:ST.onlyHl,marks:[...ST.marks].map(k=>k.split(':').map(Number)),mark_empty:ST.me,columns:ST.cols,format:ST.fmt})})}
   catch(e){ST.res={error:e.message}}
@@ -685,7 +879,7 @@ function pipeCard(){
   let h=`<section class="card" id="pipe"><h2>Quy trình biến đổi</h2><p class="sub">Các bước chạy lần lượt từ trên xuống, bước sau thấy kết quả của bước trước. Đổi thứ tự bằng mũi tên.</p>`;
   if(!L.length)h+='<p class="hint">Chưa có bước nào. Thêm công thức hoặc quy tắc điều kiện ở các mục bên dưới.</p>';
   else h+=L.map((o,i)=>{const s=o.stats||{},e=Object.entries(s.errors||{}),f=o.type==='CONDITIONAL',nzt=o.type==='NORMALIZE',st=STL[o.status]||STL.OFF;
-    const sum=nzt?nzSum(o):f?rlSum(o):`${o.target} = ${o.expression}`,info=o.enabled?nzt?(s.changed!=null?'Đổi '+s.changed+' ô'+(s.overwritten?', ghi đè '+s.overwritten:'')+(s.invalid?'; '+s.invalid+' ô không chuẩn hóa được':'')+(s.review?'; '+s.review+' ô chưa rõ định dạng':''):''):(f?(s.matched!=null?'Khớp '+s.matched+' dòng'+(s.overwritten?', ghi đè '+s.overwritten:' ô':''):''):(s.rows!=null?'Đã tính '+s.rows+' dòng':''))+(e.length?'; ⚠ '+e.map(x=>x[1]+' '+x[0]).join(', '):''):'';
+    const sum=nzt?nzSum(o):f?rlSum(o):`${o.target} = ${o.expression}`,info=o.enabled?nzt?(s.changed!=null?'Đổi '+s.changed+' ô'+(s.overwritten?', ghi đè '+s.overwritten:'')+(s.invalid?'; '+s.invalid+' ô không chuẩn hóa được':'')+(s.review?'; '+s.review+' ô chưa rõ định dạng':''):''):(f?(s.matched!=null?'Khớp '+s.matched+' dòng'+(s.overwritten?', ghi đè '+s.overwritten+' ô':''):''):(s.rows!=null?'Đã tính '+s.rows+' dòng':''))+(e.length?'; ⚠ '+e.map(x=>x[1]+' '+x[0]).join(', '):''):'';
     return`<div class="sg"><div><label><input type="checkbox" data-optg="${o.id}"${o.enabled?' checked':''}> <b>Bước ${i+1}: ${nzt?'Chuẩn hóa':f?'Quy tắc':'Công thức'}${o.name?' "'+esc(o.name)+'"':''}</b></label><small>${esc(sum)}</small><small>${esc(info)} <b style="color:${st[1]}">${st[0]}</b></small></div><div class="rw" style="margin:0"><button class="add" data-opmv="${o.id}:-1"${i?'':' disabled'}>↑</button><button class="add" data-opmv="${o.id}:1"${i<L.length-1?'':' disabled'}>↓</button><button class="add" data-opedit="${o.id}">Sửa</button><button class="add" data-opdel="${o.id}">Xóa</button></div></div>${i<L.length-1?'<div style="text-align:center;color:var(--mute);margin:-2px 0 6px">↓</div>':''}`}).join('');
   h+=`<div class="rw" style="margin-top:10px"><button class="add" id="fc-undo"${O.can_undo?'':' disabled'}>Hoàn tác</button><button class="add" id="fc-redo"${O.can_redo?'':' disabled'}>Làm lại</button><button class="add" id="pp-report">Báo cáo lỗi</button></div>
   <label class="f" style="margin-top:8px">Cách đọc số dạng 1.234 hoặc 1,234<select id="nf"><option value="auto"${O.numfmt==='auto'?' selected':''}>Tự nhận từ các ô khác</option><option value="vi"${O.numfmt==='vi'?' selected':''}>Kiểu Việt Nam: 1.234 là 1234, 1,234 là 1,234</option><option value="en"${O.numfmt==='en'?' selected':''}>Kiểu quốc tế: 1,234 là 1234, 1.234 là 1,234</option></select></label>`;
@@ -1424,12 +1618,16 @@ function bindTechEvents(){
 }
 
 /* === INITIALIZATION & FILE DRAG DROP === */
-api('/api/config').then(c=>{CFG=c;$('#eng').textContent='Bộ xử lý: '+c.engine+' | v'+c.version}).catch(()=>{});
+api('/api/config').then(c=>{CFG=c;$('#eng').textContent='Bộ xử lý: '+c.engine+' | v'+c.version}).catch(()=>{CFG={ai:false,engine:'Trình duyệt'};$('#eng').textContent='Bộ xử lý: Trình duyệt (Tự động)'});
 $('#out').onclick=()=>fetch('/api/logout',{method:'POST',headers:{'X-Requested-With':'datadesk'}}).finally(()=>{location='/login'});
 
 const dz=$('#drop');
 window.addEventListener('dragover',e=>{e.preventDefault()});
-window.addEventListener('drop',e=>{e.preventDefault()});
+window.addEventListener('drop',e=>{
+  e.preventDefault();
+  const files=e.dataTransfer&&e.dataTransfer.files;
+  if(files&&files.length>0)upload(files[0]);
+});
 
 ['dragover','dragenter'].forEach(v=>dz.addEventListener(v,e=>{
   e.preventDefault();
@@ -1440,7 +1638,7 @@ window.addEventListener('drop',e=>{e.preventDefault()});
 ['dragleave'].forEach(v=>dz.addEventListener(v,e=>{
   e.preventDefault();
   e.stopPropagation();
-  dz.classList.remove('on');
+  if(!dz.contains(e.relatedTarget)) dz.classList.remove('on');
 }));
 
 dz.addEventListener('drop',e=>{

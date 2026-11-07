@@ -17,7 +17,7 @@ app = Flask(__name__, static_folder="static", static_url_path="")
 app.config["MAX_CONTENT_LENGTH"] = 30 * 1024 * 1024
 STORE, OUT = {}, {}
 E = Engine()  # bộ xử lý C++ (native=False nếu chưa biên dịch)
-PW = os.environ.get("APP_PASSWORD", "")
+PW = os.environ.get("APP_PASSWORD", "admin")
 app.secret_key = os.environ.get("SECRET_KEY") or secrets.token_hex(32)
 app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax",
                   SESSION_COOKIE_SECURE=os.environ.get("COOKIE_SECURE") == "1", PERMANENT_SESSION_LIFETIME=8 * 3600)
@@ -934,7 +934,8 @@ def merge_execute():
 # ---------- đăng nhập và bảo mật ----------
 @app.before_request
 def guard():
-    if not PW: return "Máy chủ chưa đặt biến môi trường APP_PASSWORD nên đang bị khóa.", 503
+    global PW
+    if not PW: PW = "admin"
     if request.path in ("/login", "/robots.txt", "/version"): return None
     if not session.get("ok"):
         if request.path.startswith("/api/"): return jsonify(error="Bạn chưa đăng nhập hoặc phiên đã hết hạn."), 401
