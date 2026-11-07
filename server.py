@@ -833,6 +833,104 @@ def merge_mapping():
         return R(False, errors=[{"code": "INVALID_MAPPING", "message": err} for err in validation["errors"]], warnings=validation["warnings"])
     return R(True, data={"valid": True, "mappings": mappings}, warnings=validation["warnings"])
 
+@app.post("/api/merge/execute")
+def merge_execute():
+    p = request.get_json(silent=True) or {}
+    rec = STORE.get(p.get("id"))
+    if not rec:
+        raise ValueError("Phiên làm việc đã hết hạn, hãy tải file lên lại.")
+    ti_a = int(p.get("table_a", 0))
+    ti_b = int(p.get("table_b", 1))
+    mode = str(p.get("mode", "UNION")).upper()
+    join_key_a = p.get("key_a")
+    join_key_b = p.get("key_b")
+    mappings = p.get("mappings") or []
+
+    t_a = get_table(rec, ti_a)
+    t_b = get_table(rec, ti_b)
+    hdr_a = guess_header(t_a) or bool(t_a.get("derived"))
+    hdr_b = guess_header(t_b) or bool(t_b.get("derived"))
+    headers_a = [disp(c).strip() or ("Cột %d" % (j + 1)) for j, c in enumerate(t_a["rows"][0])] if hdr_a else ["Cột %d" % (j + 1) for j in range(len(t_a["rows"][0]))]
+    body_a = t_a["rows"][1:] if hdr_a else t_a["rows"]
+    headers_b = [disp(c).strip() or ("Cột %d" % (j + 1)) for j, c in enumerate(t_b["rows"][0])] if hdr_b else ["Cột %d" % (j + 1) for j in range(len(t_b["rows"][0]))]
+    body_b = t_b["rows"][1:] if hdr_b else t_b["rows"]
+
+    if mode == "UNION":
+        col_map = {}
+        for m in mappings:
+            s_name = m.get("source_name")
+            t_name = m.get("target_name")
+            if s_name in headers_a and t_name in headers_b:
+                col_map[headers_b.index(t_name)] = headers_a.index(s_name)
+        if not col_map:
+            for j_b, h_b in enumerate(headers_b):
+                if h_b in headers_a:
+                    col_map[j_b] = headers_a.index(h_b)
+                elif j_b < len(headers_a):
+                    col_map[j_b] = j_b
+
+        merged_rows = [list(headers_a)]
+        for r_a in body_a:
+            merged_rows.append(list(r_a))
+        for r_b in body_b:
+            new_r = ["" for _ in range(len(headers_a))]
+            for j_b, val in enumerate(r_b):
+                if j_b in col_map:
+                    target_idx = col_map[j_b]
+                    if target_idx < len(new_r):
+                        new_r[target_idx] = val
+            merged_rows.append(new_r)
+
+        new_table_name = "%s + %s (Gộp dòng)" % (t_a["name"], t_b["name"])
+        new_t = {
+            "name": new_table_name,
+            "rows": merged_rows,
+            "dropped": 0,
+            "derived": True
+        }
+        rec["tables"].append(new_t)
+        new_idx = len(rec["tables"]) - 1
+        return R(True, data={"new_table_index": new_idx, "name": new_table_name, "tables": [info(t, guess_header(t)) for t in rec["tables"]]})
+
+    elif mode == "JOIN":
+        idx_a = headers_a.index(join_key_a) if join_key_a in headers_a else 0
+        idx_b = headers_b.index(join_key_b) if join_key_b in headers_b else 0
+
+        extra_b_indices = [j for j, h in enumerate(headers_b) if j != idx_b or h != headers_a[idx_a]]
+        extra_b_headers = [headers_b[j] if headers_b[j] not in headers_a else (headers_b[j] + " (B)") for j in extra_b_indices]
+
+        merged_headers = list(headers_a) + extra_b_headers
+        merged_rows = [merged_headers]
+
+        b_lookup = {}
+        for r_b in body_b:
+            k = disp(r_b[idx_b]).strip().casefold()
+            if k and k not in b_lookup:
+                b_lookup[k] = r_b
+
+        matched_count = 0
+        for r_a in body_a:
+            k_a = disp(r_a[idx_a]).strip().casefold()
+            match_b = b_lookup.get(k_a)
+            if match_b:
+                matched_count += 1
+                merged_rows.append(list(r_a) + [match_b[j] for j in extra_b_indices])
+            else:
+                merged_rows.append(list(r_a) + ["" for _ in extra_b_indices])
+
+        new_table_name = "%s ⨝ %s (Ghép khóa)" % (t_a["name"], t_b["name"])
+        new_t = {
+            "name": new_table_name,
+            "rows": merged_rows,
+            "dropped": 0,
+            "derived": True
+        }
+        rec["tables"].append(new_t)
+        new_idx = len(rec["tables"]) - 1
+        return R(True, data={"new_table_index": new_idx, "name": new_table_name, "matched_rows": matched_count, "tables": [info(t, guess_header(t)) for t in rec["tables"]]})
+
+    return R(False, errors=[{"code": "INVALID_MODE", "message": "Chế độ gộp không hợp lệ."}])
+
 # ---------- đăng nhập và bảo mật ----------
 @app.before_request
 def guard():
