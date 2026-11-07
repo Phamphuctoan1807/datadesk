@@ -467,6 +467,7 @@ function parseClientFile(f){
         mode: 'all',
         onlyHl: false,
         fmt: 'xlsx',
+        formulaMode: 'value',
         res: null,
         mgTa: 0,
         mgTb: 0,
@@ -519,6 +520,7 @@ async function upload(f){
       mode:'all',
       onlyHl:false,
       fmt:'xlsx',
+      formulaMode:'value',
       res:null,
       mgTa:0,
       mgTb:d.tables.length>1?1:0,
@@ -612,8 +614,11 @@ function ui(){
   ${ST.flts.map((r,i)=>`<div class="rw"><b>${i?(ST.mode==='all'?'Và':'Hoặc'):'Chỉ giữ dòng có'}</b>${colSel('flts',i,r.col)}${opSel('flts',r,i)}${valIn('flts',r,i)}${rm('flts',i)}</div>`).join('')}
   <div class="rw"><button class="add" data-add="flts">+ Thêm điều kiện lọc dòng</button>${ST.flts.length>1?`<select id="mode"><option value="all"${ST.mode==='all'?' selected':''}>Dòng phải thỏa tất cả điều kiện</option><option value="any"${ST.mode==='any'?' selected':''}>Dòng thỏa một trong các điều kiện</option></select>`:''}
   ${ST.hls.length||ST.marks.size||ST.me||I.colored?`<label><input type="checkbox" id="onlyhl"${ST.onlyHl?' checked':''}> Chỉ xuất các dòng có ô được tô màu</label>`:''}</div></section>`;
-  h+=`<section class="card" id="card-export"><h2>Xuất file</h2><div class="rw"><select id="fmt"><option value="xlsx"${ST.fmt==='xlsx'?' selected':''}>Excel (.xlsx), giữ màu tô</option><option value="csv"${ST.fmt==='csv'?' selected':''}>CSV (.csv), không có màu</option></select>
-  <button class="go" id="go">Xử lý và kiểm tra dữ liệu</button></div><p class="hint">Sau khi xử lý, hệ thống đọc lại file vừa tạo và đối chiếu với file gốc bằng engine kép. Chỉ khi mọi bước đạt thì nút tải về mới xuất hiện.</p>${res()}</section>`;
+  h+=`<section class="card" id="card-export"><h2>Xuất file</h2><div class="rw"><select id="fmt"><option value="xlsx"${ST.fmt==='xlsx'?' selected':''}>Excel (.xlsx), giữ màu & định dạng</option><option value="csv"${ST.fmt==='csv'?' selected':''}>CSV (.csv), UTF-8 có BOM</option><option value="tsv"${ST.fmt==='tsv'?' selected':''}>TSV (.tsv), phân tách tab</option><option value="json"${ST.fmt==='json'?' selected':''}>JSON (.json), dữ liệu web</option></select>
+  ${ST.fmt==='xlsx'?`<select id="formula_mode"><option value="value"${ST.formulaMode!=='formula'?' selected':''}>Xuất giá trị đã tính (Khuyên dùng)</option><option value="formula"${ST.formulaMode==='formula'?' selected':''}>Xuất công thức Excel nguyên bản</option></select>`:''}
+  <button class="go" id="go">Xử lý và kiểm tra dữ liệu</button></div>
+  ${ST.fmt!=='xlsx'?`<p class="hint" style="color:#d97706;margin:6px 0 0">⚠️ Lưu ý: Định dạng ${ST.fmt.toUpperCase()} không lưu được màu sắc ô và định dạng bảng.</p>`:''}
+  <p class="hint">Sau khi xử lý, hệ thống đọc lại file vừa tạo và đối chiếu với file gốc bằng engine kép. Chỉ khi mọi bước đạt thì nút tải về mới xuất hiện.</p>${res()}</section>`;
   h+=bar();
   $('#work').innerHTML=h}
 
@@ -623,7 +628,7 @@ function res(){const r=ST.res;if(!r)return'';
   <ul class="chk">${r.checks.map(c=>`<li class="${c.ok?'y':'n'}"><span class="ic">${c.ok?'✓':'✗'}</span><span>${esc(c.t)}<small>${esc(c.d)}</small></span></li>`).join('')}</ul>`;
   h+=`<p class="sub">Xem trước ${Math.min(r.preview.length-(r.header?1:0),100)} trên ${r.total} dòng:</p><div class="tw"><table>${r.preview.map((row,i)=>{const th=r.header&&i===0;return'<tr class="fl">'+row.map((v,c)=>{const f=r.fills[i][c];return`<${th?'th':'td'}${f?` style="background:${f}"`:''}>${esc(v)}</${th?'th':'td'}>`}).join('')+'</tr>'}).join('')}</table></div>`;
   if(!r.total)h+='<p class="hint">Không có dòng nào khớp điều kiện nên file chỉ có dòng tiêu đề.</p>';
-  if(r.token)h+=`<p style="margin:14px 0 0"><a class="go" href="/api/download/${r.token}" download="${esc(r.filename)}">${r.ok?'Tải ':'Vẫn tải '}${esc(r.filename)}</a></p>`;else if(r.downloadUrl)h+=`<p style="margin:14px 0 0"><a class="go" href="${r.downloadUrl}" download="${esc(r.filename)}">Tải ${esc(r.filename)}</a></p>`;
+  if(r.token)h+=`<div style="display:flex;gap:10px;align-items:center;margin:14px 0 0;flex-wrap:wrap"><a class="go" href="/api/download/${r.token}" download="${esc(r.filename)}">${r.ok?'Tải ':'Vẫn tải '}${esc(r.filename)}</a><a class="add" style="text-decoration:none;padding:8px 14px;border-radius:6px;display:inline-block" href="/api/validate/audit/${r.token}?format=csv" download="audit_log.csv">📥 Tải Audit Log (CSV)</a><a class="add" style="text-decoration:none;padding:8px 14px;border-radius:6px;display:inline-block" href="/api/validate/audit/${r.token}?format=json" download="audit_log.json">📄 Audit Log (JSON)</a></div>`;else if(r.downloadUrl)h+=`<p style="margin:14px 0 0"><a class="go" href="${r.downloadUrl}" download="${esc(r.filename)}">Tải ${esc(r.filename)}</a></p>`;
   return h+'</div>'}
 
 async function run(auto){
@@ -664,10 +669,28 @@ async function run(auto){
     const cols = ST.cols.length > 0 ? ST.cols : ST.info.columns.map((_,i)=>i);
     const outHeaders = cols.map(c => ST.info.columns[c].name);
     const outRows = processed.map(r => cols.map(c => r[c] !== undefined ? r[c] : ''));
-    const csvContent = '\ufeff' + [outHeaders, ...outRows].map(r => r.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(',')).join('\r\n');
-    const blob = new Blob([csvContent], {type: 'text/csv;charset=utf-8;'});
+    let fileContent = '';
+    let mimeType = 'text/csv;charset=utf-8;';
+    let fileExt = ST.fmt || 'csv';
+    if(fileExt === 'json'){
+      const jsonData = outRows.map(r => {
+        let obj = {};
+        outHeaders.forEach((h, idx) => obj[h || ('Cột ' + (idx + 1))] = r[idx]);
+        return obj;
+      });
+      fileContent = JSON.stringify(jsonData, null, 2);
+      mimeType = 'application/json;charset=utf-8;';
+    } else if(fileExt === 'tsv'){
+      fileContent = '\ufeff' + [outHeaders, ...outRows].map(r => r.map(v => String(v).replace(/\t/g, ' ')).join('\t')).join('\r\n');
+      mimeType = 'text/tab-separated-values;charset=utf-8;';
+    } else {
+      fileExt = 'csv';
+      fileContent = '\ufeff' + [outHeaders, ...outRows].map(r => r.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(',')).join('\r\n');
+      mimeType = 'text/csv;charset=utf-8;';
+    }
+    const blob = new Blob([fileContent], {type: mimeType});
     const url = URL.createObjectURL(blob);
-    const fn = (ST.name.replace(/\.[^.]+$/, '') || 'datadesk') + '_da_xu_ly.csv';
+    const fn = (ST.name.replace(/\.[^.]+$/, '') || 'datadesk') + '_da_xu_ly.' + fileExt;
     
     ST.res = {
       ok: true,
@@ -698,7 +721,7 @@ async function run(auto){
     return;
   }
   const ok=L=>L.filter(x=>x.col>=0);
-  try{ST.res=await api('/api/process',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:ST.id,table:ST.t,header:ST.hdr,sorts:ok(ST.sorts),highlights:ok(ST.hls),filters:ok(ST.flts),filter_mode:ST.mode,only_highlighted:ST.onlyHl,marks:[...ST.marks].map(k=>k.split(':').map(Number)),mark_empty:ST.me,columns:ST.cols,format:ST.fmt})})}
+  try{ST.res=await api('/api/process',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:ST.id,table:ST.t,header:ST.hdr,sorts:ok(ST.sorts),highlights:ok(ST.hls),filters:ok(ST.flts),filter_mode:ST.mode,only_highlighted:ST.onlyHl,marks:[...ST.marks].map(k=>k.split(':').map(Number)),mark_empty:ST.me,columns:ST.cols,format:ST.fmt,formula_mode:ST.formulaMode||'value'})})}
   catch(e){ST.res={error:e.message}}
   ui();
   if(auto&&ST.res.ok&&ST.res.token){const a=document.createElement('a');a.href='/api/download/'+ST.res.token;a.download=ST.res.filename;document.body.appendChild(a);a.click();a.remove()}
@@ -729,7 +752,8 @@ W.addEventListener('change',e=>{const el=e.target,d=el.dataset;
   else if(el.id==='mode'){ST.mode=el.value;ST.res=null;ui()}
   else if(el.id==='me'){ST.me=el.checked;ST.res=null}
   else if(el.id==='onlyhl'){ST.onlyHl=el.checked;ST.res=null}
-  else if(el.id==='fmt'){ST.fmt=el.value;ST.res=null}
+  else if(el.id==='fmt'){ST.fmt=el.value;ST.res=null;ui()}
+  else if(el.id==='formula_mode'){ST.formulaMode=el.value;ST.res=null}
   else if(el.id==='mg-file'){if(el.files&&el.files[0])mgAddFile(el.files[0]);el.value=''}
   else if(el.id==='mg-ta'){ST.mgTa=+el.value;ST.mgRes=null;ui()}
   else if(el.id==='mg-tb'){ST.mgTb=+el.value;ST.mgRes=null;ui()}

@@ -6,9 +6,9 @@ env = dict(os.environ);
 env["PYTHONIOENCODING"] = "utf-8"
 env["PYTHONUTF8"] = "1"
 if "--fast" in sys.argv: env["DATADESK_FAST"] = "1"
-names = ["test_units", "test_golden", "test_formula", "test_rules", "test_pipeline", "test_normalize", "test_schema", "test_merge_api", "test_integration", "test_core", "test_ui"]; res = []
+names = ["test_units", "test_golden", "test_formula", "test_rules", "test_pipeline", "test_normalize", "test_schema", "test_merge_api", "test_export", "test_validation", "test_audit", "test_integration", "test_core", "test_ui"]; res = []
 for n in names:
-    t0 = time.time(); p = subprocess.run([sys.executable, os.path.join("tests", n + ".py")], cwd=root, env=env, capture_output=True, text=True)
+    t0 = time.time(); p = subprocess.run([sys.executable, os.path.join("tests", n + ".py")], cwd=root, env=env, capture_output=True, text=True, encoding="utf-8", errors="replace")
     last = [l for l in (p.stdout + p.stderr).splitlines() if l.strip()][-1:] or [""]
     res.append((n, p.returncode, time.time() - t0, last[0][:90]))
 print("\n%-18s %-6s %6s  %s" % ("Bộ kiểm thử", "Kết quả", "Giây", "Dòng cuối"))

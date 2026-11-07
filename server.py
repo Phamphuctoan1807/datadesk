@@ -9,6 +9,8 @@ import rules as RL
 import pipeline as PL
 import normalize as NZ
 import schema as SC
+import export as EXP
+import validate_engine as VE
 import openpyxl
 from openpyxl.styles import PatternFill, Font
 from openpyxl.utils import get_column_letter
@@ -350,7 +352,9 @@ def _process(p):
     if not rec: raise ValueError("Phiên làm việc đã hết hạn, hãy tải file lên lại.")
     t = get_table(rec, int(p.get("table", 0))); rows = t["rows"]; W = len(rows[0])
     hdr = 1 if (p.get("header") or t.get("derived")) else 0; body = list(range(hdr, len(rows)))
-    fmt = "csv" if p.get("format") == "csv" else "xlsx"
+    fmt = str(p.get("format", "xlsx")).lower()
+    if fmt not in ("xlsx", "csv", "tsv", "json"): fmt = "xlsx"
+    formula_mode = str(p.get("formula_mode", "value")).lower()
     cols = [c for c in dict.fromkeys(p.get("columns") or range(W)) if isinstance(c, int) and 0 <= c < W]
     if not cols: raise ValueError("Hãy chọn ít nhất một cột để xuất.")
     chk = lambda L: [x for x in L if isinstance(x.get("col"), int) and 0 <= x["col"] < W]
@@ -405,11 +409,10 @@ def _process(p):
     if p.get("only_highlighted"): sel = [i for i in sel if any((i, c) in fills for c in range(W))]
     if not sel and not hdr: raise ValueError("Không có dòng nào thỏa điều kiện đã chọn, hãy nới điều kiện lọc.")
     outidx = ([0] if hdr else []) + sel
-    if fmt == "csv": data = write_csv(t, outidx, cols)
-    else: data = write_xlsx(t, outidx, cols, fills, hdr, t["name"])
+    data = EXP.export_data(t, outidx, cols, fills, bool(hdr), t["name"], fmt, formula_mode)
     # 4) kiểm tra độc lập bằng cách đọc lại file vừa tạo
-    got, gfill = read_back(data, fmt, len(outidx), len(cols))
-    ex = [[disp(rows[i][c]) if fmt == "csv" else norm(rows[i][c]) for c in cols] for i in outidx]
+    got, gfill = EXP.read_back(data, fmt, len(outidx), len(cols))
+    ex = [[disp(rows[i][c]) if fmt in ("csv", "tsv") else norm(rows[i][c]) for c in cols] for i in outidx]
     C = lambda name, ok, d: {"t": name, "ok": bool(ok), "d": d}; checks = []
     checks.append(C("Số dòng và số cột đúng", len(got) == len(outidx) and all(len(r) == len(cols) for r in got),
                     "%d dòng x %d cột trong file xuất." % (len(got), len(cols))))
@@ -424,7 +427,7 @@ def _process(p):
     checks.append(C("Giữ và loại đúng dòng theo điều kiện", expect == set(sel) and len(sel) == len(set(sel)),
                     "Giữ %d trên %d dòng dữ liệu, loại %d dòng." % (len(sel), len(body), len(body) - len(sel))))
     if not flts and not p.get("only_highlighted"):
-        a = Counter(json.dumps([norm(rows[i][c]) if fmt != "csv" else disp(rows[i][c]) for c in cols], default=str) for i in body)
+        a = Counter(json.dumps([norm(rows[i][c]) if fmt not in ("csv", "tsv") else disp(rows[i][c]) for c in cols], default=str) for i in body)
         b = Counter(json.dumps(r, default=str) for r in got[hdr:])
         checks.append(C("Không mất, không thừa dòng nào", a == b, "Mọi dòng của file gốc đều có mặt đúng số lần."))
     vlev = []
@@ -449,7 +452,16 @@ def _process(p):
         want = {(pos[i], cols.index(c) + 1): col for (i, c), col in fills2.items() if i in pos and c in cols}
         checks.append(C("Màu tô đúng ô cần tô", want == gfill and fills2 == fills, "%d ô được tô màu, đối chiếu lại từ file xuất." % len(want)))
     elif fills:
-        checks.append(C("Tô màu", True, "CSV không lưu được màu. Chọn Excel (.xlsx) để giữ màu tô."))
+        checks.append(C("Tô màu", True, "%s không lưu được màu. Chọn Excel (.xlsx) để giữ màu tô." % fmt.upper()))
+    explained_loss = (len(body) - len(sel)) if (flts or p.get("only_highlighted")) else 0
+    loss_safe, loss_detail, _ = VE.detect_data_loss(
+        input_row_count=len(body),
+        output_row_count=len(sel),
+        filter_removed_count=explained_loss
+    )
+    checks.append(C("Bảo toàn số dòng dữ liệu", loss_safe, loss_detail))
+    for w in EXP.format_warnings(fmt):
+        checks.append(C("Lưu ý định dạng " + fmt.upper(), True, w))
     dv = t.get("derived")
     if dv:  # chạy lại cả quy trình từ dữ liệu gốc bằng bộ tính độc lập rồi so với file đã xuất
         pos_ = {i: r for r, i in enumerate(outidx, 1)}
@@ -475,8 +487,51 @@ def process(): return jsonify(_process(request.get_json(force=True)))
 def download(token):
     o = OUT.get(token)
     if not o: raise ValueError("Liên kết tải đã hết hạn, hãy xử lý lại.")
-    mime = "text/csv" if o["fmt"] == "csv" else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    mimes = {
+        "csv": "text/csv; charset=utf-8",
+        "tsv": "text/tab-separated-values; charset=utf-8",
+        "json": "application/json; charset=utf-8",
+        "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    }
+    mime = mimes.get(o["fmt"], "application/octet-stream")
     return send_file(io.BytesIO(o["data"]), mimetype=mime, as_attachment=True, download_name=o["name"])
+
+@app.post("/api/export/preview")
+def export_preview_api():
+    p = request.get_json(force=True)
+    rec = STORE.get(p.get("id"))
+    if not rec: raise ValueError("Phiên làm việc đã hết hạn, hãy tải file lên lại.")
+    t = get_table(rec, int(p.get("table", 0)))
+    rows = t["rows"]; W = len(rows[0])
+    hdr = 1 if (p.get("header") or t.get("derived")) else 0
+    cols = [c for c in dict.fromkeys(p.get("columns") or range(W)) if isinstance(c, int) and 0 <= c < W]
+    fmt = str(p.get("format", "xlsx")).lower()
+    formula_mode = str(p.get("formula_mode", "value")).lower()
+    preview_data = EXP.export_preview(t, cols, hdr=bool(hdr), fmt=fmt, formula_mode=formula_mode, max_rows=10)
+    warnings = EXP.format_warnings(fmt)
+    return jsonify(success=True, preview=preview_data, warnings=warnings, format=fmt, formula_mode=formula_mode)
+
+@app.get("/api/validate/audit/<token>")
+def validate_audit_api(token):
+    o = OUT.get(token)
+    rec = None
+    rep = None
+    for r in STORE.values():
+        if (r.get("report") or {}).get("token") == token or token in OUT:
+            rep = r.get("report")
+            if rep: break
+    if not rep:
+        for r in STORE.values():
+            if r.get("report"):
+                rep = r.get("report"); break
+    if not rep: raise ValueError("Không tìm thấy nhật ký kiểm tra audit log.")
+    fmt = request.args.get("format", "json").lower()
+    vr = VE.ValidationReport()
+    for c in rep.get("checks", []):
+        vr.add_check(c["t"], c["ok"], c["d"])
+    if fmt == "csv":
+        return send_file(io.BytesIO(vr.to_csv().encode("utf-8-sig")), mimetype="text/csv; charset=utf-8", as_attachment=True, download_name="audit_log.csv")
+    return jsonify(success=True, audit=vr.to_json())
 
 # ---------- biến đổi dữ liệu: công thức (Giai đoạn 1 và 2 của lộ trình) ----------
 # Mô hình dữ liệu: bảng gốc bất biến (rec["tables"]) + nhật ký thao tác (rec["ops"]) -> bảng dẫn xuất (get_table), không sửa bản gốc.
