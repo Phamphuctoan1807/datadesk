@@ -92,6 +92,42 @@ class TestMergeAPI(unittest.TestCase):
         self.assertEqual(len(add_body["tables"]), 3)
         self.assertEqual(len(add_body["datasets"]), 3)
 
+        # 6. Test thực thi Gộp dòng (UNION) qua /api/merge/execute
+        res_union = self.client.post(
+            "/api/merge/execute",
+            json={"id": sid, "table_a": 0, "table_b": 1, "mode": "UNION", "mappings": user_mappings},
+            headers=hdrs
+        )
+        self.assertEqual(res_union.status_code, 200)
+        u_body = res_union.get_json()
+        self.assertTrue(u_body["success"])
+        self.assertEqual(u_body["data"]["stats"]["total_rows"], 4)
+        self.assertEqual(len(u_body["data"]["tables"]), 4)
+
+        # 7. Test thực thi Ghép theo khóa (JOIN) qua /api/merge/execute
+        res_join = self.client.post(
+            "/api/merge/execute",
+            json={"id": sid, "table_a": 0, "table_b": 2, "mode": "JOIN", "key_a": "Mã KH", "key_b": "Mã KH", "join_type": "left"},
+            headers=hdrs
+        )
+        self.assertEqual(res_join.status_code, 200)
+        j_body = res_join.get_json()
+        self.assertTrue(j_body["success"])
+        self.assertEqual(j_body["data"]["matched_rows"], 2)
+        self.assertEqual(j_body["data"]["stats"]["mode"], "JOIN")
+        self.assertEqual(len(j_body["data"]["tables"]), 5)
+
+        # 8. Test chế độ không hợp lệ
+        res_inv = self.client.post(
+            "/api/merge/execute",
+            json={"id": sid, "table_a": 0, "table_b": 1, "mode": "UNKNOWN"},
+            headers=hdrs
+        )
+        self.assertEqual(res_inv.status_code, 400)
+        inv_body = res_inv.get_json()
+        self.assertFalse(inv_body["success"])
+        self.assertEqual(inv_body["errors"][0]["code"], "INVALID_MODE")
+
     def test_unauthenticated_blocked(self):
         # Thoát đăng nhập
         client = server.app.test_client()

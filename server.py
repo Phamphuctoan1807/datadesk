@@ -9,6 +9,7 @@ import rules as RL
 import pipeline as PL
 import normalize as NZ
 import schema as SC
+import merge_engine as ME
 import export as EXP
 import validate_engine as VE
 import openpyxl
@@ -25,7 +26,7 @@ app.config.update(SESSION_COOKIE_HTTPONLY=True, SESSION_COOKIE_SAMESITE="Lax",
                   SESSION_COOKIE_SECURE=os.environ.get("COOKIE_SECURE") == "1", PERMANENT_SESSION_LIFETIME=8 * 3600)
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
 FAILS = {}
-VERSION = "2026.10.10-gd5.0"  # hiện ở góc trên giao diện và tại /version để biết bản nào đang chạy
+VERSION = "2026.10.10-gd6.0"  # hiện ở góc trên giao diện và tại /version để biết bản nào đang chạy
 RED = "#FF5C5C"  # màu đỏ dùng khi đánh dấu thiếu sót
 AI_KEY = os.environ.get("AI_API_KEY", "").strip()  # bỏ khoảng trắng/xuống dòng dán nhầm
 AI_URL = (os.environ.get("AI_BASE_URL") or "https://generativelanguage.googleapis.com/v1beta/openai").strip().rstrip("/")  # biến để trống thì dùng mặc định
@@ -191,7 +192,7 @@ def info(t, hdr):
     for c in range(W):
         vals = [r[c] for r in body]; ne = [v for v in vals if not blank(v)]
         nm = disp(rows[0][c]).strip() if hdr else ""
-        cols.append({"name": nm or "Cột %d" % (c + 1), "type": (t.get("derived") or {}).get("ctypes", {}).get(c) or detect(vals), "empty": len(vals) - len(ne),
+        cols.append({"name": nm or "Cột %d" % (c + 1), "type": (t.get("derived") if isinstance(t.get("derived"), dict) else {}).get("ctypes", {}).get(c) or detect(vals), "empty": len(vals) - len(ne),
                      "unique": len({disp(v) for v in ne}), "sample": disp(ne[0])[:40] if ne else ""})
     dup = len(body) - len({json.dumps([disp(x) for x in r]) for r in body})
     return {"name": t["name"], "n_rows": len(body), "n_cols": W, "dropped": t["dropped"], "dup": dup,
@@ -362,7 +363,7 @@ def _process(p):
     marks = [(m[0], m[1]) for m in (p.get("marks") or [])[:20000]
              if isinstance(m, list) and len(m) == 2 and all(type(x) is int for x in m) and hdr <= m[0] < len(rows) and 0 <= m[1] < W]
     types = [detect([rows[i][c] for i in body]) for c in range(W)]
-    for c_, ty_ in ((t.get("derived") or {}).get("ctypes") or {}).items(): types[c_] = ty_  # cột công thức: bỏ qua ô lỗi khi nhận diện kiểu
+    for c_, ty_ in ((t.get("derived") if isinstance(t.get("derived"), dict) else {}).get("ctypes") or {}).items(): types[c_] = ty_  # cột công thức: bỏ qua ô lỗi khi nhận diện kiểu
     # 1) sắp xếp: bộ xử lý C++ (Python dự phòng nếu chưa biên dịch); ô trống/không đọc được luôn xếp cuối
     levels = []
     for s in sorts:
@@ -910,79 +911,70 @@ def merge_execute():
     headers_b = [disp(c).strip() or ("Cột %d" % (j + 1)) for j, c in enumerate(t_b["rows"][0])] if hdr_b else ["Cột %d" % (j + 1) for j in range(len(t_b["rows"][0]))]
     body_b = t_b["rows"][1:] if hdr_b else t_b["rows"]
 
+    join_type = str(p.get("join_type", "left")).lower()
+    conflict_strategy = str(p.get("conflict_strategy", "prefer_a")).lower()
+
     if mode == "UNION":
-        col_map = {}
-        for m in mappings:
-            s_name = m.get("source_name")
-            t_name = m.get("target_name")
-            if s_name in headers_a and t_name in headers_b:
-                col_map[headers_b.index(t_name)] = headers_a.index(s_name)
-        if not col_map:
-            for j_b, h_b in enumerate(headers_b):
-                if h_b in headers_a:
-                    col_map[j_b] = headers_a.index(h_b)
-                elif j_b < len(headers_a):
-                    col_map[j_b] = j_b
+        u_res = ME.execute_union(headers_a, body_a, headers_b, body_b, col_mapping=mappings)
+        chk = ME.independent_merge_check(headers_a, body_a, headers_b, body_b, u_res["headers"], u_res["rows"], mode="UNION")
+        if not chk["valid"]:
+            return R(False, errors=[{"code": "MERGE_VALIDATION_ERROR", "message": err} for err in chk["errors"]])
 
-        merged_rows = [list(headers_a)]
-        for r_a in body_a:
-            merged_rows.append(list(r_a))
-        for r_b in body_b:
-            new_r = ["" for _ in range(len(headers_a))]
-            for j_b, val in enumerate(r_b):
-                if j_b in col_map:
-                    target_idx = col_map[j_b]
-                    if target_idx < len(new_r):
-                        new_r[target_idx] = val
-            merged_rows.append(new_r)
-
+        merged_rows = [u_res["headers"]] + u_res["rows"]
         new_table_name = "%s + %s (Gộp dòng)" % (t_a["name"], t_b["name"])
         new_t = {
             "name": new_table_name,
             "rows": merged_rows,
             "dropped": 0,
-            "derived": True
+            "derived": {"is_merged": True, "ctypes": {}}
         }
         rec["tables"].append(new_t)
         new_idx = len(rec["tables"]) - 1
-        return R(True, data={"new_table_index": new_idx, "name": new_table_name, "tables": [info(t, guess_header(t)) for t in rec["tables"]]})
+        return R(True, data={
+            "new_table_index": new_idx,
+            "name": new_table_name,
+            "stats": u_res["stats"],
+            "tables": [info(t, guess_header(t)) for t in rec["tables"]]
+        })
 
     elif mode == "JOIN":
-        idx_a = headers_a.index(join_key_a) if join_key_a in headers_a else 0
-        idx_b = headers_b.index(join_key_b) if join_key_b in headers_b else 0
+        try:
+            j_res = ME.execute_join(
+                headers_a, body_a, headers_b, body_b,
+                key_a=join_key_a, key_b=join_key_b,
+                join_type=join_type,
+                conflict_strategy=conflict_strategy
+            )
+        except ValueError as ex:
+            return R(False, errors=[{"code": "JOIN_EXPANSION_ERROR", "message": str(ex)}])
 
-        extra_b_indices = [j for j, h in enumerate(headers_b) if j != idx_b or h != headers_a[idx_a]]
-        extra_b_headers = [headers_b[j] if headers_b[j] not in headers_a else (headers_b[j] + " (B)") for j in extra_b_indices]
+        chk = ME.independent_merge_check(
+            headers_a, body_a, headers_b, body_b,
+            j_res["headers"], j_res["rows"],
+            mode="JOIN", join_type=join_type,
+            key_a=join_key_a, key_b=join_key_b
+        )
+        if not chk["valid"]:
+            return R(False, errors=[{"code": "MERGE_VALIDATION_ERROR", "message": err} for err in chk["errors"]])
 
-        merged_headers = list(headers_a) + extra_b_headers
-        merged_rows = [merged_headers]
-
-        b_lookup = {}
-        for r_b in body_b:
-            k = disp(r_b[idx_b]).strip().casefold()
-            if k and k not in b_lookup:
-                b_lookup[k] = r_b
-
-        matched_count = 0
-        for r_a in body_a:
-            k_a = disp(r_a[idx_a]).strip().casefold()
-            match_b = b_lookup.get(k_a)
-            if match_b:
-                matched_count += 1
-                merged_rows.append(list(r_a) + [match_b[j] for j in extra_b_indices])
-            else:
-                merged_rows.append(list(r_a) + ["" for _ in extra_b_indices])
-
+        merged_rows = [j_res["headers"]] + j_res["rows"]
         new_table_name = "%s ⨝ %s (Ghép khóa)" % (t_a["name"], t_b["name"])
         new_t = {
             "name": new_table_name,
             "rows": merged_rows,
             "dropped": 0,
-            "derived": True
+            "derived": {"is_merged": True, "ctypes": {}}
         }
         rec["tables"].append(new_t)
         new_idx = len(rec["tables"]) - 1
-        return R(True, data={"new_table_index": new_idx, "name": new_table_name, "matched_rows": matched_count, "tables": [info(t, guess_header(t)) for t in rec["tables"]]})
+        return R(True, data={
+            "new_table_index": new_idx,
+            "name": new_table_name,
+            "matched_rows": j_res["stats"]["matched_rows"],
+            "stats": j_res["stats"],
+            "conflicts": j_res["conflicts"],
+            "tables": [info(t, guess_header(t)) for t in rec["tables"]]
+        }, warnings=j_res["stats"].get("warnings", []))
 
     return R(False, errors=[{"code": "INVALID_MODE", "message": "Chế độ gộp không hợp lệ."}])
 
